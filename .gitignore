@@ -1,0 +1,21 @@
+#MATLAB
+
+# OSX / *nix default autosave extension
+*.m~
+
+# Compiled MEX binaries (all platforms)
+*.mex*
+
+# Simulink code generation folders
+slprj/
+sccprj/
+
+# Simulink autosave extension
+*.autosave
+
+# Matlab code generation folders
+codegen/
+
+Generated code/
+
+Test*/
