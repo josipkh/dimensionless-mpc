@@ -1,13 +1,25 @@
 %% Two-track model LTV MPC
 %% Problem setup
 clear;yalmip('clear');close all;clc
-load Params.mat  % vehicle parameters
+
+% vehicle parameters
+load ParamsFull.mat
+m   = VEHICLE.MASS;
+L   = VEHICLE.WHEEL_BASE;
+Cfx = VEHICLE.SLIP_STIFF;
+w   = VEHICLE.TRACK_FRONT;
+l   = VEHICLE.WHEEL_BASE;
+lf  = VEHICLE.LF;
+lr  = VEHICLE.LR;
+rw  = VEHICLE.WHEEL_RADIUS;
+steering_ratio  = VEHICLE.STEERING_RATIO;
+max_steering_rate = VEHICLE.MAX_STEERING_RATE;
 
 % system dimensions
-nx = params.nx;             % no. of states
-nu = params.nu;             % no. of inputs
+nx = 7;                     % no. of states (vx, vy, dtheta, wheel speeds)
+nu = 4;                     % no. of inputs (wheel torques)
 neps = 16;                  % no. of slack variables
-C = [eye(4),zeros(4)];      % first four states are available
+C = [eye(3),zeros(3,4)];    % first three states are available
 ny = size(C,1);             % no. of tracked states
 
 % simulation setup
@@ -26,21 +38,20 @@ enable_constraints = [1;    % dynamics
                       0];   % input rate
 
 % Pi-groups
-Mxi = diag([sqrt(params.Cfx*params.l/params.m),...
-           sqrt(params.Cfx*params.l/params.m),...
-           1,...
-           sqrt(params.Cfx/params.m/params.l)*ones(1,5)]);
-if ~enablePi; Mxi = eye(8); end
+Mxi = diag([sqrt(Cfx*L/m),...
+           sqrt(Cfx*L/m),...
+           sqrt(Cfx/m/L)*ones(1,5)]);
+if ~enablePi; Mxi = eye(nx); end
 Mxinv = Mxi\eye(nx);
-Mu = params.l*params.Cfx*eye(nu);
-if ~enablePi; Mu = eye(4); end
+Mu = L*Cfx * eye(nu);
+if ~enablePi; Mu = eye(nu); end
 Muinv = Mu\eye(nu);
-that = sqrt(params.m*params.l/params.Cfx);  % time conversion factor t=that*tp
+that = sqrt(m*L/Cfx);  % time conversion factor t=that*tp
 if ~enablePi; that = 1; end
 Tsp = Ts/that;  % normalize time units
 
 % objective function matrices
-Q = diag([0 1e4 0 1e6]);                % tracked state weights
+Q = diag([1e6 0 1e8]);                  % tracked state weights
 Q = C * Mxi * C' * Q * C * Mxi * C';    % transform to Pi-space
 QN = Q;                                 % terminal cost weights
 S = 1e-3*eye(nu);                       % input weights
@@ -70,20 +81,20 @@ ops.savesolveroutput = 1;
 ops.savesolverinput = 1;
 
 % slip and slip angle limits (for stability)
-slipMax = params.slipMax;  % conversion not needed (dimensionless)
-slipMin = params.slipMin;
-alphaMax = params.alphaMax;  % conversion not needed (angle)
-alphaMin = params.alphaMin;
+slipMax = VEHICLE.LIN_TIRE_KAPPA_MAX;  % conversion not needed (dimensionless)
+slipMin = VEHICLE.LIN_TIRE_KAPPA_MIN;
+alphaMax = VEHICLE.LIN_TIRE_ALPHA_MAX;  % conversion not needed (angle)
+alphaMin = VEHICLE.LIN_TIRE_ALPHA_MIN;
 
 % actuator limitations
-torqueMax = params.Tmax;  % N
+torqueMax = VEHICLE.MAX_TORQUE;  % N
 torqueMax = Muinv(1) * torqueMax;  % convert to Pi-space
-torqueMin = Muinv(1) * params.Tmin;
+torqueMin = Muinv(1) * -VEHICLE.MAX_TORQUE;
 
-torqueRateMax = params.dTmax;  % Nm/s
+torqueRateMax = VEHICLE.MAX_TORQUE_RATE;  % Nm/s
 torqueRateMax = Muinv(1) * that * torqueRateMax;  % convert to Pi-space
 torqueRateMax = torqueRateMax * Tsp;  % max change in one time step
-torqueRateMin = Muinv(1) * that * params.dTmin * Tsp;
+torqueRateMin = Muinv(1) * that * -VEHICLE.MAX_TORQUE_RATE * Tsp;
 
 %% formulate the constraints
 constraints = [];
@@ -125,24 +136,24 @@ for k = 1:N+1
     
     % state constraints
     slipConstraints = [    
-        (-sin(deltaf)*(slipMax + 1))*xi{k}(1) + (-cos(deltaf)*(slipMax + 1))*xi{k}(2) + (params.w*cos(deltaf) - params.lf*sin(deltaf))*(slipMax + 1)*xi{k}(4) + params.rw*xi{k}(5) - e{k}(1) <= 0,...
-        (-sin(deltaf)*(slipMax + 1))*xi{k}(1) + (-cos(deltaf)*(slipMax + 1))*xi{k}(2) + (-(params.w*cos(deltaf) + params.lf*sin(deltaf))*(slipMax + 1))*xi{k}(4) + params.rw*xi{k}(6) - e{k}(2) <= 0,...
-        (- slipMax - 1)*xi{k}(2) + params.w*(slipMax + 1)*xi{k}(4) + params.rw*xi{k}(7) - e{k}(3) <= 0,...
-        (- slipMax - 1)*xi{k}(2) + (-params.w*(slipMax + 1))*xi{k}(4) + params.rw*xi{k}(8) - e{k}(4) <= 0,...
-        sin(deltaf)*(slipMin + 1)*xi{k}(1) + cos(deltaf)*(slipMin + 1)*xi{k}(2) + (-(params.w*cos(deltaf) - params.lf*sin(deltaf))*(slipMin + 1))*xi{k}(4) + (-params.rw)*xi{k}(5) - e{k}(5) <= 0,...
-        sin(deltaf)*(slipMin + 1)*xi{k}(1) + cos(deltaf)*(slipMin + 1)*xi{k}(2) + (params.w*cos(deltaf) + params.lf*sin(deltaf))*(slipMin + 1)*xi{k}(4) + (-params.rw)*xi{k}(6) - e{k}(6) <= 0,...
-        (slipMin + 1)*xi{k}(2) + (-params.w*(slipMin + 1))*xi{k}(4) + (-params.rw)*xi{k}(7) - e{k}(7) <= 0,...
-        (slipMin + 1)*xi{k}(2) + params.w*(slipMin + 1)*xi{k}(4) + (-params.rw)*xi{k}(8) - e{k}(8) <= 0];
+        (-cos(deltaf)*(slipMax + 1))*xi{k}(1) + (-sin(deltaf)*(slipMax + 1))*xi{k}(2) + (w*cos(deltaf) - lf*sin(deltaf))*(slipMax + 1)*xi{k}(3) + rw*xi{k}(4) - e{k}(1) <= 0,...
+        (-cos(deltaf)*(slipMax + 1))*xi{k}(1) + (-sin(deltaf)*(slipMax + 1))*xi{k}(2) + (-(w*cos(deltaf) + lf*sin(deltaf))*(slipMax + 1))*xi{k}(3) + rw*xi{k}(5) - e{k}(2) <= 0,...
+        (- slipMax - 1)*xi{k}(1) + w*(slipMax + 1)*xi{k}(3) + rw*xi{k}(6) - e{k}(3) <= 0,...
+        (- slipMax - 1)*xi{k}(1) + (-w*(slipMax + 1))*xi{k}(3) + rw*xi{k}(7) - e{k}(4) <= 0,...
+        cos(deltaf)*(slipMin + 1)*xi{k}(1) + sin(deltaf)*(slipMin + 1)*xi{k}(2) + (-(w*cos(deltaf) - lf*sin(deltaf))*(slipMin + 1))*xi{k}(3) + (-rw)*xi{k}(4) - e{k}(5) <= 0,...
+        cos(deltaf)*(slipMin + 1)*xi{k}(1) + sin(deltaf)*(slipMin + 1)*xi{k}(2) + (w*cos(deltaf) + lf*sin(deltaf))*(slipMin + 1)*xi{k}(3) + (-rw)*xi{k}(5) - e{k}(6) <= 0,...
+        (slipMin + 1)*xi{k}(1) + (-w*(slipMin + 1))*xi{k}(3) + (-rw)*xi{k}(6) - e{k}(7) <= 0,...
+        (slipMin + 1)*xi{k}(1) + w*(slipMin + 1)*xi{k}(3) + (-rw)*xi{k}(7) - e{k}(8) <= 0];
 
     slipAngleConstraints = [
-        (cos(deltaf) - alphaMax*sin(deltaf))*xi{k}(1) + (- sin(deltaf) - alphaMax*cos(deltaf))*xi{k}(2) + (alphaMax*(params.w*cos(deltaf) - params.lf*sin(deltaf)) + params.lf*cos(deltaf) + params.w*sin(deltaf))*xi{k}(4) - e{k}(9) <= 0,...
-        (cos(deltaf) - alphaMax*sin(deltaf))*xi{k}(1) + (- sin(deltaf) - alphaMax*cos(deltaf))*xi{k}(2) + (params.lf*cos(deltaf) - alphaMax*(params.w*cos(deltaf) + params.lf*sin(deltaf)) - params.w*sin(deltaf))*xi{k}(4) - e{k}(10) <= 0,...
-        xi{k}(1) + (-alphaMax)*xi{k}(2) + (alphaMax*params.w - params.lr)*xi{k}(4) - e{k}(11) <= 0,...
-        xi{k}(1) + (-alphaMax)*xi{k}(2) + (- params.lr - alphaMax*params.w)*xi{k}(4) - e{k}(12) <= 0,...
-        (alphaMin*sin(deltaf) - cos(deltaf))*xi{k}(1) + (sin(deltaf) + alphaMin*cos(deltaf))*xi{k}(2) + (- alphaMin*(params.w*cos(deltaf) - params.lf*sin(deltaf)) - params.lf*cos(deltaf) - params.w*sin(deltaf))*xi{k}(4) - e{k}(13) <= 0,...
-        (alphaMin*sin(deltaf) - cos(deltaf))*xi{k}(1) + (sin(deltaf) + alphaMin*cos(deltaf))*xi{k}(2) + (alphaMin*(params.w*cos(deltaf) + params.lf*sin(deltaf)) - params.lf*cos(deltaf) + params.w*sin(deltaf))*xi{k}(4) - e{k}(14) <= 0,...
-        alphaMin*xi{k}(2) - xi{k}(1) + (params.lr - alphaMin*params.w)*xi{k}(4) - e{k}(15) <= 0,...
-        alphaMin*xi{k}(2) - xi{k}(1) + (params.lr + alphaMin*params.w)*xi{k}(4) - e{k}(16) <= 0];
+        (- sin(deltaf) - alphaMax*cos(deltaf))*xi{k}(1) + (cos(deltaf) - alphaMax*sin(deltaf))*xi{k}(2) + (alphaMax*(w*cos(deltaf) - lf*sin(deltaf)) + lf*cos(deltaf) + w*sin(deltaf))*xi{k}(3) - e{k}(9) <= 0,...
+        (- sin(deltaf) - alphaMax*cos(deltaf))*xi{k}(1) + (cos(deltaf) - alphaMax*sin(deltaf))*xi{k}(2) + (lf*cos(deltaf) - alphaMax*(w*cos(deltaf) + lf*sin(deltaf)) - w*sin(deltaf))*xi{k}(3) - e{k}(10) <= 0,...
+        (-alphaMax)*xi{k}(1) + xi{k}(2) + (alphaMax*w - lr)*xi{k}(3) - e{k}(11) <= 0,...
+        (-alphaMax)*xi{k}(1) + xi{k}(2) + (- lr - alphaMax*w)*xi{k}(3) - e{k}(12) <= 0,...
+        (sin(deltaf) + alphaMin*cos(deltaf))*xi{k}(1) + (alphaMin*sin(deltaf) - cos(deltaf))*xi{k}(2) + (- alphaMin*(w*cos(deltaf) - lf*sin(deltaf)) - lf*cos(deltaf) - w*sin(deltaf))*xi{k}(3) - e{k}(13) <= 0,...
+        (sin(deltaf) + alphaMin*cos(deltaf))*xi{k}(1) + (alphaMin*sin(deltaf) - cos(deltaf))*xi{k}(2) + (alphaMin*(w*cos(deltaf) + lf*sin(deltaf)) - lf*cos(deltaf) + w*sin(deltaf))*xi{k}(3) - e{k}(14) <= 0,...
+        alphaMin*xi{k}(1) - xi{k}(2) + (lr - alphaMin*w)*xi{k}(3) - e{k}(15) <= 0,...
+        alphaMin*xi{k}(2) - xi{k}(2) + (lr + alphaMin*w)*xi{k}(3) - e{k}(16) <= 0];
     
     if enable_constraints(2)
         constraints = [constraints, slipConstraints:['Slip ' num2str(k)],...
@@ -161,7 +172,7 @@ controller = optimizer(constraints,objective,ops,parameters_in,solutions_out);
 
 % initial state and input
 vx0 = 10;
-xi0 = [0; vx0; 0; 0; 250/79*vx0*ones(4,1)];
+xi0 = [vx0; 0; 0; 250/79*vx0*ones(4,1)];
 u0 = 3.2590*ones(4,1);
 
 % reference generation
@@ -177,20 +188,19 @@ switch reference
         u0 = zeros(4,1);
         deltaf = zeros(1,nsim);
         vx1 = 8;
-        xiref = [zeros(1,nsim+N+1); 
-                 [vx0*ones(1,floor(nsim/3)),...
+        xiref = [[vx0*ones(1,floor(nsim/3)),...
                   vx0+(vx1-vx0)/round(nsim/3)*(0:floor(nsim/3)),...
                   vx1*ones(1,nsim-2*floor(nsim/3)+N)];
                  zeros(2,nsim+N+1)]; 
     case 3
-        % step steer
-        steerStep = 5;  % steering angle in degrees
-        deltaf = [zeros(1,floor(nsim/5)) deg2rad(steerStep)*ones(1,ceil(nsim*4/5))];  % step steer
-        thetadref = vx0/params.l * tan(deltaf);  % eq. 23 from (FER,2019)
-        thetaref = Ts * cumsum(thetadref);  % integration to get theta
-        xiref = [zeros(1,nsim+N+1);
-                 vx0*ones(1,nsim+N+1);
-                 thetaref, thetaref(end)*ones(1,N+1);
+        % step steer (rate limited)
+        steerGoal = 30;  % target steering angle in degrees
+        steerGoal = deg2rad(steerGoal);  % convert to radians
+        steerRamp = [0 : max_steering_rate*Ts : steerGoal, steerGoal];  % limit the rate
+        deltaf = [zeros(1,floor(nsim/5)) steerRamp steerGoal*ones(1,nsim-floor(nsim/5)-length(steerRamp))];
+        thetadref = vx0/le * tan(deltaf / steering_ratio);  % eq. 23 from (FER,2019)
+        xiref = [vx0*ones(1,nsim+N+1);
+                 zeros(1,nsim+N+1);
                  thetadref, thetadref(end)*ones(1,N+1)];
     otherwise
         error('undefined reference')
@@ -218,8 +228,8 @@ Xis(:,1) = xi0;
 % figure; hold on  % for live plotting
 Xi = xi0;
 U = u0;
-ay = 0;
 ax = 0;
+ay = 0;
 
 tic
 for i = 1 : nsim
@@ -234,7 +244,7 @@ for i = 1 : nsim
             [~,xihat] = ode45(@OdeTwoTrackModel,[0,Ts],[xihat;oldUs(:,j);deltaf(i)]);
             [A,B] = TwoTrackModelJacobian(oldXis(:,j),oldUs(:,j),deltaf(i));
         end
-        xihat = xihat(end,1:8)';  % nx*(N+1)
+        xihat = xihat(end,1:nx)';  % nx*(N+1)
         % transform to Pi-space
         xihats(:,j+1) = Mxinv * xihat;
         
@@ -274,13 +284,13 @@ for i = 1 : nsim
     U = solutions{1}(:,1);  % take the first optimal input
     U = Mu * U  % convert back from Pi-space
     Xi = Mxi * Xi;
-    [~,Xi] = ode45(@OdeSimulationModel,[0,Ts],[Xi;U;deltaf(i);ay;ax]);
-    Xi = Xi(end,1:8)'
+    [~,Xi] = ode45(@OdeSimulationModel,[0,Ts],[Xi;U;deltaf(i);ax;ay]);
+    Xi = Xi(end,1:nx)'
     i
     
     % calculate the acceleration
-    f = OdeSimulationModel(0,[Xi;U;deltaf(i);ay;ax]);
-    ay = f(1); ax = f(2);
+    f = OdeSimulationModel(0,[Xi;U;deltaf(i);ax;ay]);
+    ax = f(1); ay = f(2);
     
     % save optimization results for the next iteration
     oldXis = [Xi, Mxi * predictions(:,2:end)];
@@ -294,21 +304,21 @@ toc
 
 %% plot the results
 t = 0:Ts:nsim*Ts;
-xiref = Mxi(1:4,1:4) * xiref(:,1:nsim+1);
+xiref = Mxi(1:3,1:3) * xiref(:,1:nsim+1);
 
 % states and reference
 figure
-ylabels = {'$v_y$ [m/s]','$v_x$ [m/s]','$\theta$ [rad]','$\dot{\theta}$ [rad/s]',...
+ylabels = {'$v_x$ [m/s]','$v_y$ [m/s]','$\dot{\theta}$ [rad/s]',...
            '\omega FL [rad/s]','\omega FR [rad/s]','\omega RL [rad/s]','\omega RR [rad/s]'};
-for i = 1:4
-    subplot(4,1,i)
+for i = 1:3
+    subplot(3,1,i)
     plot(t,Xis(i,:))
     hold on
     plot(t,xiref(i,:))
     xlabel('Time [s]')
     ylabel(ylabels{i})
 end
-subplot(4,1,1)
+subplot(3,1,1)
 title('States and reference')
 
 % inputs
@@ -328,17 +338,13 @@ xlabel('t [s]')
 ylabel('Input torque rate [Nm/s]')
 
 % plot the trajectory
-dy = Xis(1,:);
-dx = Xis(2,:);
-psi = Xis(3,:);
-dY = dx.*sin(psi) + dy.*cos(psi);
+dx = Xis(1,:);
+dy = Xis(2,:);
+psi = Ts*cumtrapz(Xis(3,:));
 dX = dx.*cos(psi) - dy.*sin(psi);
-Y = Ts*cumtrapz(dY);
+dY = dx.*sin(psi) + dy.*cos(psi);
 X = Ts*cumtrapz(dX);
-
-lf = params.lf;
-lr = params.lr;
-w  = params.w;
+Y = Ts*cumtrapz(dY);
 
 X1 =  lf*cos(psi) - w/2*sin(psi);
 X2 =  lf*cos(psi) + w/2*sin(psi);

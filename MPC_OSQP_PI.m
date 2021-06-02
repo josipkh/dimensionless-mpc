@@ -1,18 +1,27 @@
 %% Two-track model LTV MPC
-
 clear;clc;close all
 
 generate_code = false;
 generated_code_folder = './Generated code';
 
 % vehicle parameters
-load Params.mat
+load ParamsFull.mat
+m = VEHICLE.MASS;
+L = VEHICLE.WHEEL_BASE;
+Cfx = VEHICLE.SLIP_STIFF;
+w = VEHICLE.TRACK_FRONT;
+le = VEHICLE.WHEEL_BASE;
+lf = VEHICLE.LF;
+lr = VEHICLE.LR;
+rw = VEHICLE.WHEEL_RADIUS;
+steering_ratio  = VEHICLE.STEERING_RATIO;
+max_steering_rate = VEHICLE.MAX_STEERING_RATE;
 
 % system dimensions
-nx = params.nx;             % no. of states
-nu = params.nu;             % no. of inputs
+nx = 7;                     % no. of states
+nu = 4;                     % no. of inputs
 neps = 16;                  % no. of slack variables
-C = [eye(4),zeros(4)];      % first four states are available
+C = [eye(3),zeros(3,4)];    % first four states are available
 ny = size(C,1);             % no. of tracked states
 
 % simulation setup
@@ -23,32 +32,30 @@ nsim = Tsim / Ts;           % no. of simulation steps
 % MPC parameters
 N = 10;                                 % prediction horizon
 M = 3;                                  % control horizon (blocking)
-Q = diag([10 100 1e4 2e4 0 0 0 0]);     % tracked state weights
+Q = diag([1e6 0 2e8 0 0 0 0]);          % tracked state weights
 QN = Q;                                 % terminal cost weights
 S = 1e-3*eye(nu);                       % input weights
 R = 1e-2*eye(nu);                       % input rate weights
 p = 100;                                % slack variable weights
 
-enablePi = 1;       % use Pi-groups?
+enablePi = 0;       % use Pi-groups?
 constraints = [1;   % dynamics
                0;   % state (slip, slip angle) -> soft constraints
                1;   % input
                0];  % input rate
 
 % Pi-groups
-Mxi = diag([sqrt(params.Cfx*params.l/params.m),...
-           sqrt(params.Cfx*params.l/params.m),...
-           1,...
-           sqrt(params.Cfx/params.m/params.l)*ones(1,5)]);
-if ~enablePi; Mxi = eye(8); end
+Mxi = diag([sqrt(Cfx*L/m),...
+           sqrt(Cfx*L/m),...
+           sqrt(Cfx/m/L)*ones(1,5)]);
+if ~enablePi; Mxi = eye(nx); end
 Mxinv = Mxi\eye(nx);
-Mu = params.l*params.Cfx*eye(nu);
-if ~enablePi; Mu = eye(4); end
+Mu = L*Cfx * eye(nu);
+if ~enablePi; Mu = eye(nu); end
 Muinv = Mu\eye(nu);
-that = sqrt(params.m*params.l/params.Cfx);  % time conversion factor t=that*tp
+that = sqrt(m*L/Cfx);  % time conversion factor t=that*tp
 if ~enablePi; that = 1; end
 Tsp = Ts/that;  % normalize time units
-% Cp = C * Mxi;
 
 % transform MPC weights to Pi-space
 Q = Mxi * Q * Mxi;
@@ -111,51 +118,49 @@ end
 %% state constraints (soft)
 
 % slip and slip angle limits (for stability)
-slipMax = params.slipMax;  % conversion not needed (dimensionless)
-slipMin = params.slipMin;
-% slipMax = 0.3; slipMin = -0.3;
-alphaMax = params.alphaMax;  % conversion not needed (angle)
-alphaMin = params.alphaMin;
-% alphaMax = 0.1745; alphaMin = -0.1745;
-w = params.w; rw = params.rw; lf = params.lf; lr = params.lr;
+slipMax = VEHICLE.LIN_TIRE_KAPPA_MAX;  % conversion not needed (dimensionless)
+slipMin = VEHICLE.LIN_TIRE_KAPPA_MIN;
+alphaMax = VEHICLE.LIN_TIRE_ALPHA_MAX;  % conversion not needed (angle)
+alphaMin = VEHICLE.LIN_TIRE_ALPHA_MIN;
+
 if enablePi; le = lf+lr; w = w/le; rw = rw/le; lf = lf/le; lr = lr/le; end
 deltaf = deg2rad(5);
 
 slipFLUpperBound = [
-    (-sin(deltaf)*(slipMax + 1)), (-cos(deltaf)*(slipMax + 1)), 0,...
+    (-cos(deltaf)*(slipMax + 1)), (-sin(deltaf)*(slipMax + 1)),...
     (w*cos(deltaf) - lf*sin(deltaf))*(slipMax + 1), rw, 0, 0, 0];
 slipFRUpperBound = [
-    (-sin(deltaf)*(slipMax + 1)), (-cos(deltaf)*(slipMax + 1)), 0,...
+    (-cos(deltaf)*(slipMax + 1)), (-sin(deltaf)*(slipMax + 1)),...
     (-(w*cos(deltaf) + lf*sin(deltaf))*(slipMax + 1)), 0, rw, 0, 0];
-slipRLUpperBound = [0, (-slipMax - 1), 0, w*(slipMax + 1), 0, 0, rw, 0];
-slipRRUpperBound = [0, (-slipMax - 1), 0, (-w*(slipMax + 1)), 0, 0, 0, rw];
+slipRLUpperBound = [(-slipMax - 1), 0, w*(slipMax + 1), 0, 0, rw, 0];
+slipRRUpperBound = [(-slipMax - 1), 0, (-w*(slipMax + 1)), 0, 0, 0, rw];
 
 slipFLLowerBound = [
-    sin(deltaf)*(slipMin + 1), cos(deltaf)*(slipMin + 1), 0,...
+    cos(deltaf)*(slipMin + 1), sin(deltaf)*(slipMin + 1),...
     (-(w*cos(deltaf) - lf*sin(deltaf))*(slipMin + 1)), -rw, 0, 0, 0];
 slipFRLowerBound = [
-    sin(deltaf)*(slipMin + 1), cos(deltaf)*(slipMin + 1), 0,...
+    cos(deltaf)*(slipMin + 1), sin(deltaf)*(slipMin + 1),...
     (w*cos(deltaf) + lf*sin(deltaf))*(slipMin + 1), 0, -rw, 0, 0];
-slipRLLowerBound = [0, (slipMin + 1), 0, -w*(slipMin + 1), 0, 0, -rw, 0];
-slipRRLowerBound = [0, (slipMin + 1), 0, w*(slipMin + 1), 0, 0, 0, -rw];
+slipRLLowerBound = [(slipMin + 1), 0, -w*(slipMin + 1), 0, 0, -rw, 0];
+slipRRLowerBound = [(slipMin + 1), 0, w*(slipMin + 1), 0, 0, 0, -rw];
 
 alphaFLUpperBound = [
-    (cos(deltaf) - alphaMax*sin(deltaf)), (- sin(deltaf) - alphaMax*cos(deltaf)), 0,...
+    (- sin(deltaf) - alphaMax*cos(deltaf)), (cos(deltaf) - alphaMax*sin(deltaf)),...
     (alphaMax*(w*cos(deltaf) - lf*sin(deltaf)) + lf*cos(deltaf) + w*sin(deltaf)), zeros(1,4)];
 alphaFRUpperBound = [
-    (cos(deltaf) - alphaMax*sin(deltaf)), (- sin(deltaf) - alphaMax*cos(deltaf)), 0,...
+    (- sin(deltaf) - alphaMax*cos(deltaf)), (cos(deltaf) - alphaMax*sin(deltaf)),...
     (lf*cos(deltaf) - alphaMax*(w*cos(deltaf) + lf*sin(deltaf)) - w*sin(deltaf)), zeros(1,4)];
-alphaRLUpperBound = [1, (-alphaMax), 0, (alphaMax*w - lr), zeros(1,4)];
-alphaRRUpperBound = [1, (-alphaMax), 0, (- lr - alphaMax*w), zeros(1,4)];
+alphaRLUpperBound = [(-alphaMax), 1, (alphaMax*w - lr), zeros(1,4)];
+alphaRRUpperBound = [(-alphaMax), 1, (- lr - alphaMax*w), zeros(1,4)];
 
 alphaFLLowerBound = [
-    (alphaMin*sin(deltaf) - cos(deltaf)), (sin(deltaf) + alphaMin*cos(deltaf)), 0,...
+    (sin(deltaf) + alphaMin*cos(deltaf)), (alphaMin*sin(deltaf) - cos(deltaf)),...
     (- alphaMin*(w*cos(deltaf) - lf*sin(deltaf)) - lf*cos(deltaf) - w*sin(deltaf)), zeros(1,4)];
 alphaFRLowerBound = [
-    (alphaMin*sin(deltaf) - cos(deltaf)), (sin(deltaf) + alphaMin*cos(deltaf)), 0,...
+    (sin(deltaf) + alphaMin*cos(deltaf)), (alphaMin*sin(deltaf) - cos(deltaf)),...
     (alphaMin*(w*cos(deltaf) + lf*sin(deltaf)) - lf*cos(deltaf) + w*sin(deltaf)), zeros(1,4)];
-alphaRLLowerBound = [-1, alphaMin, 0, lr - alphaMin*w, zeros(1,4)];
-alphaRRLowerBound = [-1, alphaMin, 0, lr + alphaMin*w, zeros(1,4)];
+alphaRLLowerBound = [alphaMin, -1, lr - alphaMin*w, zeros(1,4)];
+alphaRRLowerBound = [alphaMin, -1, lr + alphaMin*w, zeros(1,4)];
 
 stateConstraintBlock = [
     slipFLUpperBound; slipFRUpperBound; slipRLUpperBound; slipRRUpperBound;...
@@ -178,10 +183,9 @@ end
 %% actuator limitations
 
 % input constraints
-torqueMax = params.Tmax;  % N
+torqueMax = VEHICLE.MAX_TORQUE;  % N
 torqueMax = Muinv(1) * torqueMax;  % convert to Pi-space
-torqueMin = Muinv(1) * params.Tmin;
-% torqueMax = 1000; torqueMin = -1000;
+torqueMin = Muinv(1) * -VEHICLE.MAX_TORQUE;
 
 AInputConstraint = [zeros(nu*M,nx*(N+1)), speye(nu*M), zeros(nu*M,nu*M+neps*(N+1))];
 lInputConstraint = torqueMin * ones(nu*M,1);
@@ -194,10 +198,10 @@ if constraints(3)
 end   
 
 % input rate constraints
-torqueRateMax = params.dTmax;  % Nm/s
+torqueRateMax = VEHICLE.MAX_TORQUE_RATE;  % Nm/s
 torqueRateMax = Muinv(1) * that * torqueRateMax;  % convert to Pi-space
 torqueRateMax = torqueRateMax * Tsp;  % max change in one time step
-torqueRateMin = Muinv(1) * that * params.dTmin * Tsp;
+torqueRateMin = Muinv(1) * that * -VEHICLE.MAX_TORQUE_RATE * Tsp;
 % torqueRateMax = torqueRateMax / that / Tsp * Ts;
 % torqueRateMin = torqueRateMin / that / Tsp * Ts;
 
@@ -257,12 +261,12 @@ end
 %% initial state and reference
 
 % initial state and input
-vx0 = 10;   % [m/s] initial long. speed
-xi0 = [0; vx0; 0; 0; 250/79*vx0*ones(4,1)];
+vx0 = 20;   % [m/s] initial long. speed
+xi0 = [vx0; 0; 0; 250/79*vx0*ones(4,1)];
 u0 = 3.2590*ones(4,1);
 
 % reference generation
-reference = 2;
+reference = 3;
 switch reference
     case 1
         % constant forward driving
@@ -270,24 +274,23 @@ switch reference
         deltaf = zeros(1,nsim);
         xiref = repmat(C*xi0,1,nsim+N+1);
     case 2
-        % change speed from vx0 to vx1
+        % slow down from vx0 to vx1
         u0 = zeros(4,1);
         deltaf = zeros(1,nsim);
-        vx1 = 20;
-        xiref = [zeros(1,nsim+N+1); 
-                 [vx0*ones(1,floor(nsim/3)),...
+        vx1 = 8;
+        xiref = [[vx0*ones(1,floor(nsim/3)),...
                   vx0+(vx1-vx0)/round(nsim/3)*(0:floor(nsim/3)),...
                   vx1*ones(1,nsim-2*floor(nsim/3)+N)];
                  zeros(2,nsim+N+1)]; 
     case 3
-        % step steer
-        steerStep = 5;  % steering angle in degrees
-        deltaf = [zeros(1,floor(nsim/5)) deg2rad(steerStep)*ones(1,ceil(nsim*4/5))];  % step steer
-        thetadref = vx0/params.l * tan(deltaf);  % eq. 23 from (FER,2019)
-        thetaref = Ts * cumsum(thetadref);  % integration to get theta
-        xiref = [zeros(1,nsim+N+1);
-                 vx0*ones(1,nsim+N+1);
-                 thetaref, thetaref(end)*ones(1,N+1);
+        % step steer (rate limited)
+        steerGoal = 30;  % target steering angle in degrees
+        steerGoal = deg2rad(steerGoal);  % convert to radians
+        steerRamp = [0 : max_steering_rate*Ts : steerGoal, steerGoal];  % limit the rate
+        deltaf = [zeros(1,floor(nsim/5)) steerRamp steerGoal*ones(1,nsim-floor(nsim/5)-length(steerRamp))];
+        thetadref = vx0/le * tan(deltaf / steering_ratio);  % eq. 23 from (FER,2019)
+        xiref = [vx0*ones(1,nsim+N+1);
+                 zeros(1,nsim+N+1);
                  thetadref, thetadref(end)*ones(1,N+1)];
     otherwise
         error('undefined reference')
@@ -336,7 +339,7 @@ for i = 1 : nsim
             [~,xihat] = ode45(@OdeTwoTrackModel,[0,Ts],[xihat;oldUs(:,j);deltaf(i)]);
             [A,B] = TwoTrackModelJacobian(oldXis(:,j),oldUs(:,j),deltaf(i));
         end
-        xihat = xihat(end,1:8)';  % take the value at Ts
+        xihat = xihat(end,1:nx)';  % take the value at Ts
         xihats(:,j+1) = Mxinv * xihat;  % transform to Pi-space
         
         % formulate in Pi-space and discretize
@@ -375,28 +378,28 @@ for i = 1 : nsim
     
     % update the state constraints
     slipFLUpperBound = [
-        (-sin(deltaf(i))*(slipMax + 1)), (-cos(deltaf(i))*(slipMax + 1)), 0,...
+        (-cos(deltaf(i))*(slipMax + 1)), (-sin(deltaf(i))*(slipMax + 1)),...
         (w*cos(deltaf(i)) - lf*sin(deltaf(i)))*(slipMax + 1), rw, 0, 0, 0];
     slipFRUpperBound = [
-        (-sin(deltaf(i))*(slipMax + 1)), (-cos(deltaf(i))*(slipMax + 1)), 0,...
+        (-cos(deltaf(i))*(slipMax + 1)), (-sin(deltaf(i))*(slipMax + 1)),...
         (-(w*cos(deltaf(i)) + lf*sin(deltaf(i)))*(slipMax + 1)), 0, rw, 0, 0];
     slipFLLowerBound = [
-        sin(deltaf(i))*(slipMin + 1), cos(deltaf(i))*(slipMin + 1), 0,...
+        cos(deltaf(i))*(slipMin + 1), sin(deltaf(i))*(slipMin + 1),...
         (-(w*cos(deltaf(i)) - lf*sin(deltaf(i)))*(slipMin + 1)), -rw, 0, 0, 0];
     slipFRLowerBound = [
-        sin(deltaf(i))*(slipMin + 1), cos(deltaf(i))*(slipMin + 1), 0,...
+        cos(deltaf(i))*(slipMin + 1), sin(deltaf(i))*(slipMin + 1),...
         (w*cos(deltaf(i)) + lf*sin(deltaf(i)))*(slipMin + 1), 0, -rw, 0, 0];
     alphaFLUpperBound = [
-        (cos(deltaf(i)) - alphaMax*sin(deltaf(i))), (- sin(deltaf(i)) - alphaMax*cos(deltaf(i))), 0,...
+        (- sin(deltaf(i)) - alphaMax*cos(deltaf(i))), (cos(deltaf(i)) - alphaMax*sin(deltaf(i))),...
         (alphaMax*(w*cos(deltaf(i)) - lf*sin(deltaf(i))) + lf*cos(deltaf(i)) + w*sin(deltaf(i))), zeros(1,4)];
     alphaFRUpperBound = [
-        (cos(deltaf(i)) - alphaMax*sin(deltaf(i))), (- sin(deltaf(i)) - alphaMax*cos(deltaf(i))), 0,...
+        (- sin(deltaf(i)) - alphaMax*cos(deltaf(i))), (cos(deltaf(i)) - alphaMax*sin(deltaf(i))),...
         (lf*cos(deltaf(i)) - alphaMax*(w*cos(deltaf(i)) + lf*sin(deltaf(i))) - w*sin(deltaf(i))), zeros(1,4)];
     alphaFLLowerBound = [
-        (alphaMin*sin(deltaf(i)) - cos(deltaf(i))), (sin(deltaf(i)) + alphaMin*cos(deltaf(i))), 0,...
+        (sin(deltaf(i)) + alphaMin*cos(deltaf(i))), (alphaMin*sin(deltaf(i)) - cos(deltaf(i))),...
         (- alphaMin*(w*cos(deltaf(i)) - lf*sin(deltaf(i))) - lf*cos(deltaf(i)) - w*sin(deltaf(i))), zeros(1,4)];
     alphaFRLowerBound = [
-        (alphaMin*sin(deltaf(i)) - cos(deltaf(i))), (sin(deltaf(i)) + alphaMin*cos(deltaf(i))), 0,...
+        (sin(deltaf(i)) + alphaMin*cos(deltaf(i))), (alphaMin*sin(deltaf(i)) - cos(deltaf(i))),...
         (alphaMin*(w*cos(deltaf(i)) + lf*sin(deltaf(i))) - lf*cos(deltaf(i)) + w*sin(deltaf(i))), zeros(1,4)];
     stateConstraintBlock = [
         slipFLUpperBound; slipFRUpperBound; slipRLUpperBound; slipRRUpperBound;...
@@ -441,13 +444,13 @@ for i = 1 : nsim
     U = res.x(nx*(N+1)+1:nx*(N+1)+nu);  % take the first optimal input
     U = Mu * U  % convert back from Pi-space
     Xi = Mxi * Xi;
-    [~,Xi] = ode45(@OdeSimulationModel,[0,Ts],[Xi;U;deltaf(i);ay;ax]);
+    [~,Xi] = ode45(@OdeSimulationModel,[0,Ts],[Xi;U;deltaf(i);ax;ay]);
     Xi = Xi(end,1:nx)'
     i
     
     % calculate the acceleration
-    f = OdeSimulationModel(0,[Xi;U;deltaf(i);ay;ax]);
-    ay = f(1); ax = f(2);
+    f = OdeSimulationModel(0,[Xi;U;deltaf(i);ax;ay]);
+    ax = f(1); ay = f(2);
     
     % save optimization results (normal space) for the next iteration
     oldXis = [Xi, Mxi * predictions(:,2:end)];
@@ -465,17 +468,17 @@ xiref = Mxi * xiref(:,1:nsim+1);
 
 % states and reference
 figure('Name', 'states')
-ylabels = {'vy [m/s]','vx [m/s]','$\theta$ [rad]','$\dot{\theta}$ [rad/s]',...
+ylabels = {'vx [m/s]','vy [m/s]','$\dot{\theta}$ [rad/s]',...
            '$\omega_{FL}$ [rad/s]','$\omega_{FR}$ [rad/s]','$\omega_{RL}$ [rad/s]','$\omega_{RR}$ [rad/s]'};
-for i = 1:4
-    subplot(4,1,i)
+for i = 1:3
+    subplot(3,1,i)
     plot(t,Xis(i,:))
     hold on
     plot(t,xiref(i,:))
     xlabel('Time [s]')
     ylabel(ylabels{i})
 end
-subplot(4,1,1)
+subplot(3,1,1)
 title('States and reference')
 
 % % wheel speeds
@@ -490,15 +493,15 @@ title('States and reference')
 % slip and slip angle
 figure('Name', 'slips')
 subplot(2,1,1)
-sx = params.rw*Xis(5:8,:)./Xis(2,:)-1;
+sx = rw*Xis(4:7,:)./Xis(1,:)-1;
 plot(t,100*sx')
 xlabel('Time [s]')
 ylabel('Longitudinal slip [\%]')
 title('Longitudinal slip')
 legend('\kappa_{fl}','\kappa_{fr}','\kappa_{rl}','\kappa_{rr}')
 subplot(2,1,2)
-slipAngleFront = (Xis(1,:)+params.lf*Xis(4,:))./Xis(2,:)-[0 deltaf];
-slipAngleRear = (Xis(1,:)-params.lf*Xis(4,:))./Xis(2,:);
+slipAngleFront = (Xis(2,:)+lf*Xis(3,:))./Xis(1,:)-[0 deltaf];
+slipAngleRear = (Xis(2,:)-lf*Xis(3,:))./Xis(1,:);
 plot(t,rad2deg([slipAngleFront; slipAngleRear])')
 xlabel('Time [s]')
 ylabel('Slip angle [$^\circ$]')
@@ -527,17 +530,13 @@ xlabel('Time [s]')
 ylabel('Input torque rate [Nm/s]')
 
 % plot the trajectory
-dy = Xis(1,:);
-dx = Xis(2,:);
-psi = Xis(3,:);
-dY = dx.*sin(psi) + dy.*cos(psi);
+dx = Xis(1,:);
+dy = Xis(2,:);
+psi = Ts*cumtrapz(Xis(3,:));
 dX = dx.*cos(psi) - dy.*sin(psi);
-Y = Ts*cumtrapz(dY);
+dY = dx.*sin(psi) + dy.*cos(psi);
 X = Ts*cumtrapz(dX);
-
-lf = params.lf;
-lr = params.lr;
-w  = params.w;
+Y = Ts*cumtrapz(dY);
 
 X1 =  lf*cos(psi) - w/2*sin(psi);
 X2 =  lf*cos(psi) + w/2*sin(psi);

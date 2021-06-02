@@ -1,82 +1,72 @@
 %% Formulate a simulation model (load transfer, aerodynamics)
-% TODO: combined slip, Ackermann, tire model
-
 clear;clc;
+
 % create symbolic variables for states and inputs
 syms acc_long_ms2 acc_lat_ms2 vx vy yaw_rate real
-syms steer_angle_FL steer_angle_FR real
+syms deltaf real
 syms w_FL w_FR w_RL w_RR real  % wheel speeds
-syms Mp_FL Mp_FR Mp_RL Mp_RR real  % propulsion moment
-syms theta real
+syms Mp_FL Mp_FR Mp_RL Mp_RR real  % propulsion moment on each wheel
 syms Ts real  % sampling time, for differential equations (ode45 compatibility)
 
-x = [vy vx theta yaw_rate w_FL w_FR w_RL w_RR]';
-u = [Mp_FL Mp_FR Mp_RL Mp_RR]';
+x = [vx vy yaw_rate w_FL w_FR w_RL w_RR]';  % state vector
+u = [Mp_FL Mp_FR Mp_RL Mp_RR]';  % input vector
 
 % define vehicle parameters
-% full size vehicle parameters examples/demo_compact in Carmaker
-g=9.81;                     %[m/s^2]  Gravitational constant
+load ParamsFull
 % chassis
-m=1194;                     %[kg]     Total mass
-Iz=1645.687;                %[kg*m^2] Total mass moment of inertia, around CoG
-L=2.59;                     %[m]      Wheel base
-lf=1.01;                    %[m]      Distance along X-axis from CoG to front axle
-lr=1.58;                    %[m]      Distance along X-axis from CoG to rear axle
-hcg=0.549;                  %[m]      Distance along Z-axis from CoG to ground.
-track_F=1.522;              %[m]      Track width front
-track_R=1.510;              %[m]      Track width rear
-% aerodynamics
-hcp = hcg;  %???
-Cd=0.2;                     %[-]      Air drag coefficient 
-A=2.151;                    %[m^2]    Front area
-ro=1.205;                   %[kg/m^3] Air density
+m       = VEHICLE.MASS;
+Jz      = VEHICLE.INERTIA_Z;
+L       = VEHICLE.WHEEL_BASE;
+lf      = VEHICLE.LF;
+lr      = VEHICLE.LR;
+track_F = VEHICLE.TRACK_FRONT;
+track_R = VEHICLE.TRACK_REAR;
+hcg     = VEHICLE.COG_HEIGHT;
+% actuators
+ks      = VEHICLE.STEERING_RATIO;
 % wheels and tires
-Ired_FL=1.22;               %[kg*m^2] Moment of inertia for a wheel and half-axle
-Ired_FR=Ired_FL;
-Ired_RL=Ired_FL;
-Ired_RR=Ired_FL;
-R_eff_FL=0.318;             %[m]      Radius of wheel (effective)
-R_eff_FR=R_eff_FL;
-R_eff_RL=R_eff_FL;
-R_eff_RR=R_eff_FL;
+rw      = VEHICLE.WHEEL_RADIUS;
+Jw      = VEHICLE.WHEEL_INERTIA;
+Cfx     = VEHICLE.SLIP_STIFF;
+Crx     = Cfx;             
+Cfy     = VEHICLE.CORNERING_STIFF;
+Cry     = Cfy;
+% aerodynamics
+hcp     = hcg;                  % aerodynamic center of pressure
+Cd      = VEHICLE.DRAG_COEFF;
+A       = VEHICLE.FRONT_AREA;
+rho     = CONST.AIR_DENSITY;
+
+g   = CONST.GRAVITY;
 
 % MF_205_60R15_V9
 % Magic formula parameters (dry asphalt), fitted to the .tir data
 % longitudinal force
-Dx = 1.2069;
-Cx = 1.35;
-Kx = 30;
-Bx = Kx/(Cx*Dx);
-Ex = -0.5;
+Dx = VEHICLE.TIRE_DX;
+Cx = VEHICLE.TIRE_CX;
+Kx = VEHICLE.TIRE_KX;
+Bx = VEHICLE.TIRE_BX;
+Ex = VEHICLE.TIRE_EX;
 % lateral force
-Dy = 1.1;
-Cy = -2;
-Ky = -20;
-By = Ky/(Cy*Dy);
-Ey = 1;
+Dy = VEHICLE.TIRE_DY;
+Cy = VEHICLE.TIRE_CY;
+Ky = VEHICLE.TIRE_KY;
+By = VEHICLE.TIRE_BY;
+Ey = VEHICLE.TIRE_EY;
 
-% Michelin Primacy 215/55 R16
-% Tire stiffness parameters
-% C_tire = [-0.00235  30.7];
-% To calculate the cornering stiffness: Calpha = C_tire(1)*Fz^2 + C_tire(2)*Fz
-% Magic formula parameters (dry asphalt), fitted to the .tir data
-% C=1.45;
-% D=1.00;
-% E0=-4.00;
-% K=3*pi/180;
-% B=100*atan(K)/(C*D);
-% Cx=C;Dx=D;Ex=E0;Bx=B;
+disp('Parameters loaded')
 
 %syms Fx_FL Fx_FR Fx_RL Fx_RR real  % from the tire model
 %syms Fy_FL Fy_FR Fy_RL Fy_RR real
 
-steer_angle_FR = steer_angle_FL;
+steer_angle_FL = deltaf / ks;
+steer_angle_FR = deltaf / ks;
 steer_angle_RL = 0;
 steer_angle_RR = 0;
 
 %% aerodynamics
 
-Fx_aero = (vx.^2).*(Cd.*A.*ro)./2;
+Fx_aero = (vx.^2).*(Cd.*A.*rho)./2;
 Fz_aero_f = 0;  %(long_speed_ms.^2).*(Cl_f.*A.*ro)./2;
 Fz_aero_r = 0;  %(long_speed_ms.^2).*(Cl_r.*A.*ro)./2;
 
@@ -123,10 +113,10 @@ slip_angle_RR = vy_w_RR/vx_w_RR;
 
 %% slip ratio
 
-slip_ratio_FL = (w_FL*R_eff_FL - vx_w_FL) / vx_w_FL;
-slip_ratio_FR = (w_FR*R_eff_FR - vx_w_FR) / vx_w_FR;
-slip_ratio_RL = (w_RL*R_eff_RL - vx_w_RL) / vx_w_RL;
-slip_ratio_RR = (w_RR*R_eff_RR - vx_w_RR) / vx_w_RR;
+slip_ratio_FL = (w_FL*rw - vx_w_FL) / vx_w_FL;
+slip_ratio_FR = (w_FR*rw - vx_w_FR) / vx_w_FR;
+slip_ratio_RL = (w_RL*rw - vx_w_RL) / vx_w_RL;
+slip_ratio_RR = (w_RR*rw - vx_w_RR) / vx_w_RR;
 
 %% longitudinal tire forces (simplified Magic formula)
 
@@ -150,21 +140,12 @@ Fy_FR = Fz_FR * muy_FR;
 Fy_RL = Fz_RL * muy_RL;
 Fy_RR = Fz_RR * muy_RR;
 
-% from Saab datasheet
-% Fz = [Fz_FL; Fz_FR; Fz_RL; Fz_RR];
-% Calpha = C_tire(1) .* Fz.^2 + C_tire(2) .* Fz;
-% Fy = -Calpha .* [slip_angle_FL; slip_angle_FR; slip_angle_RL; slip_angle_RR];
-% Fy_FL = Fy(1);
-% Fy_FR = Fy(2);
-% Fy_RL = Fy(3);
-% Fy_RR = Fy(4);
-
 %% wheel dynamics
 
-w_dot_FL = (1/Ired_FL)*(Mp_FL  - Fx_FL*R_eff_FL);
-w_dot_FR = (1/Ired_FR)*(Mp_FR  - Fx_FR*R_eff_FR);
-w_dot_RL = (1/Ired_RL)*(Mp_RL  - Fx_RL*R_eff_RL);
-w_dot_RR = (1/Ired_RR)*(Mp_RR  - Fx_RR*R_eff_RR);
+w_dot_FL = (1/Jw)*(Mp_FL  - Fx_FL*rw);
+w_dot_FR = (1/Jw)*(Mp_FR  - Fx_FR*rw);
+w_dot_RL = (1/Jw)*(Mp_RL  - Fx_RL*rw);
+w_dot_RR = (1/Jw)*(Mp_RR  - Fx_RR*rw);
 
 %% state space
 
@@ -174,17 +155,22 @@ ax = (1/m)*(Fx_FL*cos(steer_angle_FL) + Fx_FR*cos(steer_angle_FR) + Fx_RL*cos(st
 ay = (1/m)*(Fx_FL*sin(steer_angle_FL) + Fx_FR*sin(steer_angle_FR) + Fx_RL*sin(steer_angle_RL) + Fx_RR*sin(steer_angle_RR) ...
           + Fy_FL*cos(steer_angle_FL) + Fy_FR*cos(steer_angle_FR) + Fy_RL*cos(steer_angle_RL) + Fy_RR*cos(steer_angle_RR)) - yaw_rate*vx;
 
-yaw_acc = (1/Iz)*(lf*(Fx_FL*sin(steer_angle_FL) + Fx_FR*sin(steer_angle_FR) + Fy_FL*cos(steer_angle_FL) + Fy_FR*cos(steer_angle_FR)) ...
+yaw_acc = (1/Jz)*(lf*(Fx_FL*sin(steer_angle_FL) + Fx_FR*sin(steer_angle_FR) + Fy_FL*cos(steer_angle_FL) + Fy_FR*cos(steer_angle_FR)) ...
                 - lr*(Fx_RL*sin(steer_angle_RL) + Fx_RR*sin(steer_angle_RR) + Fy_RL*cos(steer_angle_RL) + Fy_RR*cos(steer_angle_RR)) ... 
                 + (track_F/2)*(-Fx_FL*cos(steer_angle_FL) + Fx_FR*cos(steer_angle_FR) + Fy_FL*sin(steer_angle_FL) - Fy_FR*sin(steer_angle_FR)) ...
                 + (track_R/2)*(-Fx_RL*cos(steer_angle_RL) + Fx_RR*cos(steer_angle_RR) + Fy_RL*sin(steer_angle_RL) - Fy_RR*sin(steer_angle_RR)));
 
 %% Save dynamics equations as MATLAB functions
-f = [ay;ax;yaw_rate;yaw_acc;w_dot_FL;w_dot_FR;w_dot_RL;w_dot_RL];
+disp('Formulating state dynamics and simplifying')
+f = [ax;ay;yaw_acc;w_dot_FL;w_dot_FR;w_dot_RL;w_dot_RL];
+simplify(f);
 
-matlabFunction([f; u; steer_angle_FL; acc_lat_ms2; acc_long_ms2],...
+disp('Writing state dynamics to a function')
+matlabFunction([f; u; deltaf; acc_long_ms2; acc_lat_ms2],...
                'file','OdeSimulationModel',...
-               'vars',{Ts,[x;u;steer_angle_FL;acc_lat_ms2;acc_long_ms2]});
+               'vars',{Ts,[x;u;deltaf;acc_long_ms2;acc_lat_ms2]});
+           
+disp('Done')           
            
 %% Find equilibria
 % sol=solve(subs(f,{w_FL,w_FR,w_RL,w_RR,steer_angle_FL,yaw_rate,vy,vx,acc_lat_ms2,acc_long_ms2},...
