@@ -8,7 +8,6 @@ m   = VEHICLE.MASS;
 L   = VEHICLE.WHEEL_BASE;
 Cfx = VEHICLE.SLIP_STIFF;
 w   = VEHICLE.TRACK_FRONT;
-l   = VEHICLE.WHEEL_BASE;
 lf  = VEHICLE.LF;
 lr  = VEHICLE.LR;
 rw  = VEHICLE.WHEEL_RADIUS;
@@ -24,7 +23,7 @@ ny = size(C,1);             % no. of tracked states
 
 % simulation setup
 Ts = 0.05;                  % sampling time [s]
-Tsim = 5;                   % simulation time [s]
+Tsim = 10;                   % simulation time [s]
 nsim = Tsim / Ts;           % no. of simulation steps
 
 % MPC parameters
@@ -194,11 +193,11 @@ switch reference
                  zeros(2,nsim+N+1)]; 
     case 3
         % step steer (rate limited)
-        steerGoal = 30;  % target steering angle in degrees
+        steerGoal = 45;  % target steering angle in degrees
         steerGoal = deg2rad(steerGoal);  % convert to radians
         steerRamp = [0 : max_steering_rate*Ts : steerGoal, steerGoal];  % limit the rate
         deltaf = [zeros(1,floor(nsim/5)) steerRamp steerGoal*ones(1,nsim-floor(nsim/5)-length(steerRamp))];
-        thetadref = vx0/le * tan(deltaf / steering_ratio);  % eq. 23 from (FER,2019)
+        thetadref = vx0/L * tan(deltaf / steering_ratio);  % eq. 23 from (FER,2019)
         xiref = [vx0*ones(1,nsim+N+1);
                  zeros(1,nsim+N+1);
                  thetadref, thetadref(end)*ones(1,N+1)];

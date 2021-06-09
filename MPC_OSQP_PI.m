@@ -10,7 +10,6 @@ m = VEHICLE.MASS;
 L = VEHICLE.WHEEL_BASE;
 Cfx = VEHICLE.SLIP_STIFF;
 w = VEHICLE.TRACK_FRONT;
-le = VEHICLE.WHEEL_BASE;
 lf = VEHICLE.LF;
 lr = VEHICLE.LR;
 rw = VEHICLE.WHEEL_RADIUS;
@@ -123,7 +122,7 @@ slipMin = VEHICLE.LIN_TIRE_KAPPA_MIN;
 alphaMax = VEHICLE.LIN_TIRE_ALPHA_MAX;  % conversion not needed (angle)
 alphaMin = VEHICLE.LIN_TIRE_ALPHA_MIN;
 
-if enablePi; le = lf+lr; w = w/le; rw = rw/le; lf = lf/le; lr = lr/le; end
+if enablePi; w = w/L; rw = rw/L; lf = lf/L; lr = lr/L; end
 deltaf = deg2rad(5);
 
 slipFLUpperBound = [
@@ -288,7 +287,7 @@ switch reference
         steerGoal = deg2rad(steerGoal);  % convert to radians
         steerRamp = [0 : max_steering_rate*Ts : steerGoal, steerGoal];  % limit the rate
         deltaf = [zeros(1,floor(nsim/5)) steerRamp steerGoal*ones(1,nsim-floor(nsim/5)-length(steerRamp))];
-        thetadref = vx0/le * tan(deltaf / steering_ratio);  % eq. 23 from (FER,2019)
+        thetadref = vx0/L * tan(deltaf / steering_ratio);  % eq. 23 from (FER,2019)
         xiref = [vx0*ones(1,nsim+N+1);
                  zeros(1,nsim+N+1);
                  thetadref, thetadref(end)*ones(1,N+1)];
