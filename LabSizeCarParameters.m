@@ -1,14 +1,14 @@
-%=== Demo_Compact data ========================================================================
-% Numerical vehicle data representative for the Demo_Compact vehicle from IPG Carmaker examples
+%=== Lab size vehicle data ========================================================================
+% Numerical vehicle data representative for the IRS 2001
 %==============================================================================================
 clear;clc;
 
 %% --- Chassis ------------------------------------------------------------
-VEHICLE.MASS                = 1194;         %[kg]       Curb weight
-VEHICLE.INERTIA_Z           = 1645.687;     %[kg*m^2]   Total mass moment of inertia, around CoG
-VEHICLE.WHEEL_BASE          = 2.59;         %[m]        Distance between the axles
-VEHICLE.LF                  = 1.01;         %[m]        Distance along X-axis from CoG to front axle
-VEHICLE.LR                  = 1.58;         %[m]        Distance along X-axis from CoG to rear axle
+VEHICLE.MASS                = 6.02;         %[kg]       Curb weight
+VEHICLE.INERTIA_Z           = 0.153;        %[kg*m^2]   Total mass moment of inertia, around CoG
+VEHICLE.WHEEL_BASE          = 0.359;        %[m]        Distance between the axles
+VEHICLE.LF                  = 0.137;        %[m]        Distance along X-axis from CoG to front axle
+VEHICLE.LR                  = 0.222;        %[m]        Distance along X-axis from CoG to rear axle
 VEHICLE.TRACK_FRONT         = 1.522;        %[m]        Track width front
 VEHICLE.TRACK_REAR          = 1.510;        %[m]        Track width rear
 VEHICLE.COG_HEIGHT          = 0.549;        %[m]        Distance along Z-axis from CoG to ground
@@ -19,7 +19,7 @@ VEHICLE.DRAG_COEFF          = 0.2;          %[-]        Air drag coefficient (av
 % Type front and rear: MF_205_60R15_V91
 % estimated from the .tir file, Fx=Cx*sx, Fy=-Cy*alphay
 VEHICLE.SLIP_STIFF          = 103050;       %[N]        Longitudinal slip stiffness
-VEHICLE.CORNERING_STIFF     = 67043;        %[N/rad]    Cornering stiffness
+VEHICLE.CORNERING_STIFF     = 43;           %[N/rad]    Cornering stiffness
 VEHICLE.WHEEL_RADIUS        = 0.318;        %[m]        Radius of wheel
 VEHICLE.WHEEL_INERTIA       = 1.22;         %[kg*m^2]   Moment of inertia for one wheel and half-axle
 
@@ -58,7 +58,6 @@ VEHICLE.MAX_ENG_SPEED       = 8000;         %[rpm]      Maximal engine speed
 %% --- Steering -----------------------------------------------------------
 VEHICLE.STEERING_RATIO      = 18;           %[-]      Steering wheel angle / road wheel angle
 VEHICLE.MAX_STEERING_RATE   = 2*pi;         %[rad/s]  Maximal steering angle rate
-VEHICLE.MAX_STEERING_ANGLE  = 2*pi;         %[rad]    Maximal steering wheel angle
 
 %% Save the parameters in a .mat file
 save ParamsFull VEHICLE CONST
