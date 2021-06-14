@@ -1,3 +1,3 @@
 clear;clc;close all
 
-load ParamsFull.mat
+load ../ParamsFull.mat

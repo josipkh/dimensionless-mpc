@@ -16,6 +16,9 @@ sccprj/
 # Matlab code generation folders
 codegen/
 
+# Simulink cache
+*.slxc
+
 Generated code/
 
 Test*/
