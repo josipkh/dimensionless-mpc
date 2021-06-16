@@ -52,8 +52,5 @@ p5 = Iz/m/(Lf+Lr)^2;
 p = [p1 p2 p3 p4 p5];
 
 %% design LQRs and compare closed-loop poles
-K = lqr(A,B,diag([1 0 0 0]),1);
-eig(A-B*K);
-[Kp,S,~] = lqr(Ap,Bp,diag([1 0 0 0]),1);
-eig(Ap-Bp*Kp);
-eig(S);
+[K,S,CLP] = lqr(A,B,diag([1 0 0 0]),1);
+[Kp,Sp,CLPp] = lqr(Ap,Bp,diag([1 0 0 0]),1);
