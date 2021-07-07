@@ -237,11 +237,11 @@ for i = 1 : nsim
     xihats(:,1) = Mxinv * Xi;
     for j = 1:N
         if j > M
-            [~,xihat] = ode45(@OdeTwoTrackModel,[0,Ts],[xihat;oldUs(:,M);deltaf(i)]);
-            [A,B] = TwoTrackModelJacobian(oldXis(:,j),oldUs(:,M),deltaf(i));
+            [~,xihat] = ode45(@PredictionModel,[0,Ts],[xihat;oldUs(:,M);deltaf(i)]);
+            [A,B] = PredictionModelJacobian(oldXis(:,j),oldUs(:,M),deltaf(i));
         else
-            [~,xihat] = ode45(@OdeTwoTrackModel,[0,Ts],[xihat;oldUs(:,j);deltaf(i)]);
-            [A,B] = TwoTrackModelJacobian(oldXis(:,j),oldUs(:,j),deltaf(i));
+            [~,xihat] = ode45(@PredictionModel,[0,Ts],[xihat;oldUs(:,j);deltaf(i)]);
+            [A,B] = PredictionModelJacobian(oldXis(:,j),oldUs(:,j),deltaf(i));
         end
         xihat = xihat(end,1:nx)';  % nx*(N+1)
         % transform to Pi-space
@@ -283,12 +283,12 @@ for i = 1 : nsim
     U = solutions{1}(:,1);  % take the first optimal input
     U = Mu * U  % convert back from Pi-space
     Xi = Mxi * Xi;
-    [~,Xi] = ode45(@OdeSimulationModel,[0,Ts],[Xi;U;deltaf(i);ax;ay]);
+    [~,Xi] = ode45(@SimulationModel,[0,Ts],[Xi;U;deltaf(i);ax;ay]);
     Xi = Xi(end,1:nx)'
     i
     
     % calculate the acceleration
-    f = OdeSimulationModel(0,[Xi;U;deltaf(i);ax;ay]);
+    f = SimulationModel(0,[Xi;U;deltaf(i);ax;ay]);
     ax = f(1); ay = f(2);
     
     % save optimization results for the next iteration

@@ -1,8 +1,8 @@
-%% Bicycle model (2001) & Pi groups - MPC controller
-clear;clc;
+%% Bicycle model & Pi groups - MPC controller
+clear;clc;close all;
 
 %% load vehicle parameters
-vehicle_params = 1;  % 1: lab-scale IRS(2001), 2: full size (Carmaker, demo compact)
+vehicle_params = 1;  % 1: lab scale, 2: full size
 f = 1;  % scaling factor
 load_vehicle_parameters;
 
@@ -17,98 +17,111 @@ formulate_dynamics;  % A,B,C,Ad,Bd
 % Pi-groups
 formulate_pi_groups;  % M,Ap,Bp,Cp,Apd,Bpd
 
-%% MPC
-yalmip('clear');close all;clc
+%% MPC setup
+yalmip('clear');
 
 % MPC setup
-reference = 1;  % binary
-pigroups = 1;  % binary
+pigroups = 0;  % binary
 
 nx = size(A,1);  % no. of states
 nu = size(B,2);  % no. of inputs
-Cref = [0 0 0 1];  % tracked states (only yaw rate)
-if pigroups; Crefp = Cref*M; end
+Cref = [1 0 0 0];  % tracked states (only lateral position)
+% if pigroups; Crefp = Cref*M; end
 ny = size(Cref,1);  % no. of tracked states
 
-Q = 10^6*diag([0 0 0 1]);  % state weights
+Q = 10^6*diag([1 0 0 0]);  % state weights
 if pigroups; Q = M*Q*M; end
+QN = Q;  % terminal cost
 R = 1e-6;  % input weights
-N = 20;  % horizon length
+S = 1e-6;  % input rate weights
+N = 50;  % prediction horizon
+Nu = 5;  % control horizon
 
 % YALMIP data
-u = sdpvar(nu*ones(1,N),ones(1,N));
-x = sdpvar(nx*ones(1,N+1),ones(1,N+1));
-r = sdpvar(ny*ones(1,N+1),ones(1,N+1));
+x = sdpvar(nx*ones(1,N+1),ones(1,N+1));     % state variables
+r = sdpvar(ny*ones(1,N+1),ones(1,N+1));     % reference variables
+u = sdpvar(nu*ones(1,Nu),ones(1,Nu));       % input variables
+pastu = sdpvar(1);                          % previous input
+deltau = diff([pastu u{:}]);                % input rate
 ops = sdpsettings('verbose',0,'solver','osqp');  % print output
 
 % constraints and cost
 constraints = [];
-pastu = sdpvar(1);
-constraints = [-6.28/15 <= diff([pastu u{:}]) <= 6.28/15];  % constrain du, steering rate limit
+% steering rate limit
+steering_rate_limit = VEHICLE.MAX_STEERING_RATE * Ts / VEHICLE.STEERING_RATIO;
+constraints = [-steering_rate_limit <= deltau <= steering_rate_limit];
+% steering angle limit
+steering_angle_limit = VEHICLE.MAX_STEERING_ANGLE / VEHICLE.STEERING_RATIO;
+constraints = [constraints, -steering_angle_limit <= [u{:}]<= steering_angle_limit];
 objective = 0;
-for k = 1:N
-    if reference
-        objective = objective + (Cref*x{k}-r{k})'*Q(end)*(Cref*x{k}-r{k}) + u{k}'*R*u{k};
+for k = 1:N+1
+    if k == N+1
+        % terminal cost
+        objective = objective + (Cref*x{k}-r{k})'*QN(1)*(Cref*x{k}-r{k});
     else
-        objective = objective + x{k}'*Q*x{k} + u{k}'*R*u{k};
+        if k > Nu
+            % input cost
+            objective = objective + u{Nu}'*R*u{Nu};
+            % state constraints
+            if pigroups
+                constraints = [constraints, x{k+1} == Apd*x{k} + Bpd*u{Nu}];
+            else
+                constraints = [constraints, x{k+1} == Ad*x{k} + Bd*u{Nu}];
+            end
+        else
+            % input cost
+            objective = objective + u{k}*R*u{k};
+            % input rate cost
+            objective = objective + deltau(k)*S*deltau(k);
+            % state constraints
+            if pigroups
+                constraints = [constraints, x{k+1} == Apd*x{k} + Bpd*u{k}];
+            else
+                constraints = [constraints, x{k+1} == Ad*x{k} + Bd*u{k}];
+            end
+        end
+        % tracking cost
+        objective = objective + (Cref*x{k}-r{k})'*Q(1)*(Cref*x{k}-r{k});
     end
-    if pigroups
-        constraints = [constraints, x{k+1} == Apd*x{k} + Bpd*u{k}];
-    else
-        constraints = [constraints, x{k+1} == Ad*x{k} + Bd*u{k}];
-    end
-    constraints = [constraints, -6.28/15 <= u{k}<= 6.28/15];  % steering angle limit
-end
-if reference
-    objective = objective + (Cref*x{N+1}-r{N+1})'*(Cref*x{N+1}-r{N+1});
-else
-    objective = objective + x{N+1}'*Q*x{N+1};
 end
 
 solutions_out = {[u{:}], [x{:}]};
-if reference
-    parameters_in = {x{1},[r{:}]};
-    x = [0;0;0;0];  % initial state
-else
-    parameters_in = x{1};
-    if vehicle_params == 1
-        x = [0.1;0;0.1;0];  % initial state, lab-scale vehicle
-    else
-        x = [0.2;0;0;0];  % full size vehicle
-    end    
-end
-
+parameters_in = {x{1},[r{:}],pastu};
 controller = optimizer(constraints, objective, ops, parameters_in,solutions_out);
 
+%% simulation
 clf; hold on
-n = 250;
+n = 1000;
+x = [0;0;deg2rad(0);0];  % initial state
 xhist = nan(nx, n+1);
 xhist(:,1) = x;
 uhist = nan(nu, n);
-if reference; rhist = nan(ny, n); end
-% wavelength = 4 * (Lf+Lr);
-% frequency = V / wavelength;
-% yref = 0.5*(Lf+Lr)*sin(2*pi*frequency*(0:0.01:n*Ts));
-% figure;plot(0:0.01:n*Ts,yref)
+uprev = 0;
+
+rhist = nan(ny, n);
 tsim = 0:Ts:(n+N)*Ts;
-df_ref = pi/2*sin(4*tsim)/15;  % SWA max +/- 90 deg, steering ratio = 15
-yaw_rate_ref = V/(Lf+Lr)*tan(df_ref);
+wavelength = 4 * 8 * (Lf+Lr);
+frequency = V / wavelength;
+yref = 1*(Lf+Lr)*sin(2*pi*frequency*(tsim-Ts*n/5));
+yref(1:n/5) = 0;
+% plot(tsim,yref)
+% df_ref = pi/2*sin(4*tsim)/15;  % SWA max +/- 90 deg, steering ratio = 15
+% yaw_rate_ref = V/(Lf+Lr)*tan(df_ref);
 for i = 1:n
     if pigroups; x = M\x; end  % convert init. state to pi-space
-    if reference
+    future_r = yref(i:i+N);
 %         % formulate a sinusoidal y-reference
 % %         wavelength = 4 * (Lf+Lr);
 % %         frequency = V / wavelength;
 % %         future_r = 0.5*(Lf+Lr)*sin(2*pi*frequency/Ts*(i:i+N));
 %         future_r = 0.5*(Lf+Lr)*sin((i:i+N)/20);
+%         future_r = yaw_rate_ref(i)*ones(1,N+1);  % assume constant ref. yaw rate
 
-        future_r = yaw_rate_ref(i)*ones(1,N+1);  % assume constant ref. yaw rate
-        % convert the reference to pi-space
-        if pigroups; future_r = future_r/M(end); end
-        inputs = {x,future_r};
-    else
-        inputs = {x};
-    end
+    % convert the reference to pi-space
+    if pigroups; future_r = future_r/M(1); end
+    inputs = {x,future_r,uprev};
+    
+    % find the optimal input
     [solutions,diagnostics] = controller{inputs};    
     U = solutions{1};
     X = solutions{2};
@@ -116,18 +129,22 @@ for i = 1:n
         error('Solver error');
     end    
     
-    subplot(2,1,1);stairs(i:i+length(U)-1,180/pi*U,'r');title('Predicted input [deg]')
-    subplot(2,1,2);cla;stairs(i:i+N,X(4,:),'b');
-    hold on;
-    if reference; stairs(i:i+N,future_r,'k'); end
-    if pigroups
-        stairs(1:i,1/M(end)*xhist(4,1:i),'g');
-    else
-        stairs(1:i,xhist(4,1:i),'g');
-    end
-    title('Prediction, reference, state')
+    % live plot
+%     subplot(2,1,1);stairs(i:i+length(U)-1,180/pi*U,'r');title('Predicted input [deg]')
+%     subplot(2,1,2);cla;stairs(i:i+N,X(1,:),'b');
+%     hold on;
+%     stairs(i:i+N,future_r,'k');
+%     if pigroups
+%         stairs(1:i,1/M(1)*xhist(1,1:i),'g');
+%     else
+%         stairs(1:i,xhist(1,1:i),'g');
+%     end
+%     title('Prediction, reference, state')
     
-    if pigroups; x = M*x; end  % convert back to "normal" space
+    % convert back to "normal" space
+    if pigroups; x = M*x; end  
+    
+    % simulate one time step
     if vehicle_params == 1
         [~,x]=ode45(@OdeBicycleModelSmall,[0,Ts],[x;U(1)]);
     elseif vehicle_params == 2
@@ -137,23 +154,31 @@ for i = 1:n
     end
     x = x(end,1:4)';
     
+    % save for plotting
     xhist(:,i+1) = x;
     uhist(:,i) = U(1);
-    if reference
-        if pigroups; future_r = future_r*M(end); end  % convert back
-        rhist(:,i) = future_r(:,1);
-    end
+    uprev = U(1);
+    
+    if pigroups; future_r = future_r*M(1); end  % convert back
+    rhist(:,i) = future_r(:,1);
+    
+    % display progress
+    if ~mod(i,50) || i==1; disp(i); end
     pause(0.01)   
 end
 
+%% plotting
 figure; t = (1:n)*Ts;
-subplot(4,1,1); plot(t,180/pi*uhist); title('Steering angle [deg]')
-subplot(4,1,2); plot([0 t],xhist(1,:)); title('Lateral position [m]')
-subplot(4,1,3); plot([0 t],180/pi*xhist(3,:)); title('Yaw angle [deg]')
-subplot(4,1,4); plot([0 t],xhist(4,:),'b'); title('Yaw rate [rad/s]')
-if reference
+subplot(5,1,1); plot(t,180/pi*uhist*VEHICLE.STEERING_RATIO); title('Steering angle [deg]')
+    hold on; yline(180/pi*VEHICLE.MAX_STEERING_ANGLE,'--r'); yline(-180/pi*VEHICLE.MAX_STEERING_ANGLE,'--r')
+subplot(5,1,2); plot(t,[0 180/pi*diff(uhist)/Ts*VEHICLE.STEERING_RATIO]); title('Steering angle rate [deg/s]')
+hold on; yline(180/pi*VEHICLE.MAX_STEERING_RATE,'--r'); yline(-180/pi*VEHICLE.MAX_STEERING_RATE,'--r')
+subplot(5,1,3); plot([0 t],xhist(1,:)); title('Lateral position [m]')
     hold on; plot(t,rhist(1,:),'r--')
-end
+subplot(5,1,4); plot([0 t],180/pi*xhist(3,:)); title('Yaw angle [deg]')
+subplot(5,1,5); plot([0 t],xhist(4,:),'b'); title('Yaw rate [rad/s]')
+xlabel('t [s]')
+
 %% LQR
 % Sp = ss(Ap,Bp,Cp,0);
 % Q = eye(4);

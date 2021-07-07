@@ -2,11 +2,12 @@
 clear;clc;close all
 
 % Vehicle parameters
-g = 9.81;
-m = 1194;
-L = 2.59;
-lf = 1.01;
-lr = 1.58;
+load ../ParamsFull
+g = CONST.GRAVITY;
+m = VEHICLE.MASS;
+L = VEHICLE.WHEEL_BASE;
+lf = VEHICLE.LF;
+lr = VEHICLE.LR;
 
 % Number of points
 nPoints = 200;
@@ -16,7 +17,7 @@ vx = 10;    % [m/s]
 
 %% Pure longitudinal force
 Fz      = ones(nPoints,1).*m*g*lr/2/L;      % vertical load         (N)
-kappa	= linspace(-0.3,0.3, nPoints)';        % longitudinal slip 	(-) (-1 = locked wheel)
+kappa	= linspace(-0.3,0.3, nPoints)';     % longitudinal slip 	(-) (-1 = locked wheel)
 alpha	= ones(nPoints,1).*0;               % side slip angle    	(radians)
 gamma	= ones(nPoints,1).*0;               % inclination angle 	(radians)
 phit 	= ones(nPoints,1).*0;               % turnslip            	(1/m)

@@ -110,9 +110,9 @@ DfDu = jacobian(f,u);
 
 %% Save dynamics equations as MATLAB functions
 disp('Writing the Jacobians to a function')
-matlabFunction(DfDx,DfDu,'file','TwoTrackModelJacobian','vars',{xi,u,deltaf});
+matlabFunction(DfDx,DfDu,'file','PredictionModelJacobian','vars',{xi,u,deltaf});
 disp('Writing state dynamics to a function')
-matlabFunction([f;u;deltaf],'file','OdeTwoTrackModel','vars',{Ts,[xi;u;deltaf]});
+matlabFunction([f;u;deltaf],'file','PredictionModel','vars',{Ts,[xi;u;deltaf]});
 disp('Done')
 % matlabFunction(f,'file','twoTrackModel','vars',{xi,u,deltaf});
 

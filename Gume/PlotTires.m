@@ -1,11 +1,13 @@
+%% Plot a full Magic Formula (5.2), simplified MF and a linear model
 clear;clc;close all
 
 % Vehicle parameters
-g = 9.81;
-m = 1194;
-L = 2.59;
-lf = 1.01;
-lr = 1.58;
+load ../ParamsFull
+g = CONST.GRAVITY;
+m = VEHICLE.MASS;
+L = VEHICLE.WHEEL_BASE;
+lf = VEHICLE.LF;
+lr = VEHICLE.LR;
 
 % Number of points
 nPoints = 200;
@@ -42,7 +44,7 @@ d1 = diff(Fx);
 d2 = diff(kappa);
 Cfx = d1(idx0) / d2(idx0);  % derivative at the origin
 
-kappaLinearMax = 3/100;
+kappaLinearMax = 5/100;
 kappaLinearMin = -kappaLinearMax;
 [~,idxMax] = min(abs(kappa-kappaLinearMax));
 [~,idxMin] = min(abs(kappa-kappaLinearMin));
@@ -50,10 +52,10 @@ kappaLinear = kappa(idxMin:idxMax);
 Fx_linear = Cfx * kappaLinear;
 
 % Use a simplified Magic formula
-Cx = 1.35;
-Dx = 1.2069;
-Ex = -0.5;
-Kx = 30;
+Cx = VEHICLE.TIRE_CX;
+Dx = VEHICLE.TIRE_DX;
+Ex = VEHICLE.TIRE_EX;
+Kx = VEHICLE.TIRE_KX;
 Bx = Kx / (Cx*Dx);
 Bxk = Bx .* kappa;
 mux = Dx*sin(Cx*atan(Bxk-Ex*(Bxk-atan(Bxk))));
@@ -97,9 +99,9 @@ Fy = output(:,2);
 [~,idx0] = min(abs(alpha));
 d1 = diff(Fy);
 d2 = diff(alpha);
-Cfy = d1(idx0) / d2(idx0);  % derivative at the origin
+Cfy = - d1(idx0) / d2(idx0);  % derivative at the origin
 
-alphaLinearMax = deg2rad(3);
+alphaLinearMax = deg2rad(4);
 alphaLinearMin = -alphaLinearMax;
 [~,idxMax] = min(abs(alpha-alphaLinearMax));
 [~,idxMin] = min(abs(alpha-alphaLinearMin));
@@ -107,10 +109,10 @@ alphaLinear = alpha(idxMin:idxMax);
 Fy_linear = Cfy * alphaLinear;
 
 % Use a simplified Magic formula
-Cy = -2;
-Dy = 1.1;
-Ey = 1;
-Ky = -20;
+Cy = VEHICLE.TIRE_CY;
+Dy = VEHICLE.TIRE_DY;
+Ey = VEHICLE.TIRE_EY;
+Ky = VEHICLE.TIRE_KY;
 By = Ky / (Cy*Dy);
 Bya = By .* alpha;
 muy = Dy*sin(Cy*atan(Bya-Ey*(Bya-atan(Bya))));
@@ -119,7 +121,7 @@ Fys = muy .* Fz;
 figure
 plot(rad2deg(alpha),Fy./Fz,'b')
 hold on
-plot(rad2deg(alphaLinear),Fy_linear./Fz(idxMin:idxMax),'r')
+plot(rad2deg(alphaLinear),-Fy_linear./Fz(idxMin:idxMax),'r')
 plot(rad2deg(alpha),Fys./Fz,'g')
 grid on
 title('Lateral force')

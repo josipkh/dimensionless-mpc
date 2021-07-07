@@ -22,3 +22,7 @@ codegen/
 Generated code/
 
 Test*/
+
+*plots*
+*figures*
+Simulation results/
