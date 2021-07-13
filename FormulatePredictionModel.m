@@ -1,4 +1,7 @@
 %% Formulate two-track model dynamics (prediction model)
+% coordinate system: y right, z down (positive steer turns right)
+% (dual track @ https://www.mathworks.com/help/vdynblks/ref/vehiclebody3dof.html#d123e87965)
+
 clear;clc;
 load ParamsFull
 
@@ -42,10 +45,14 @@ deltafl = deltaf / ks;
 deltafr = deltaf / ks;
 
 % wheel velocities (vehicle frame)
-vflx = vx - w/2 * thetad;  vfly = vy + lf * thetad;
-vfrx = vx + w/2 * thetad;  vfry = vy + lf * thetad;
-vrlx = vx - w/2 * thetad;  vrly = vy - lr * thetad;
-vrrx = vx + w/2 * thetad;  vrry = vy - lr * thetad;
+vflx = vx + w/2 * thetad;  vfly = vy + lf * thetad;
+vfrx = vx - w/2 * thetad;  vfry = vy + lf * thetad;
+vrlx = vx + w/2 * thetad;  vrly = vy - lr * thetad;
+vrrx = vx - w/2 * thetad;  vrry = vy - lr * thetad;
+% vflx = vx - w/2 * thetad;  vfly = vy + lf * thetad;
+% vfrx = vx + w/2 * thetad;  vfry = vy + lf * thetad;
+% vrlx = vx - w/2 * thetad;  vrly = vy - lr * thetad;
+% vrrx = vx + w/2 * thetad;  vrry = vy - lr * thetad;
 
 % wheel velocities (wheel frame)
 vwflx =  vflx * cos(deltafl) + vfly * sin(deltafl);   vwrlx = vrlx;
@@ -88,13 +95,16 @@ Fwrrx = Crx * srrx;  Fwrry = -Cry * alpharr;
 % longitudinal and lateral forces
 Fflx = Fwflx * cos(deltaf) - Fwfly * sin(deltaf);   Frlx = Fwrlx;
 Ffrx = Fwfrx * cos(deltaf) - Fwfry * sin(deltaf);   Frrx = Fwrrx;
-Ffly = Fwflx * sin(deltaf) + Fwfly * cos(deltaf);   Frly = Fwrly;
-Ffry = Fwfrx * sin(deltaf) + Fwfry * cos(deltaf);   Frry = Fwrry;
+Ffly = -Fwflx * sin(deltaf) + Fwfly * cos(deltaf);   Frly = Fwrly;
+Ffry = -Fwfrx * sin(deltaf) + Fwfry * cos(deltaf);   Frry = Fwrry;
+% Ffly = Fwflx * sin(deltaf) + Fwfly * cos(deltaf);   Frly = Fwrly;
+% Ffry = Fwfrx * sin(deltaf) + Fwfry * cos(deltaf);   Frry = Fwrry;
 
 % vehicle dynamics
 x = thetad * vy + 1 / m * (Fflx + Ffrx + Frlx + Frrx);
 y = -thetad * vx + 1 / m * (Ffly + Ffry + Frly + Frry);
-z = 1 / Jz * (lf * (Ffly + Ffry) - lr * (Frly + Frry) + w * (-Fflx + Ffrx - Frlx + Frrx));
+z = 1 / Jz * (lf * (Ffly + Ffry) - lr * (Frly + Frry) + w/2 * (Fflx - Ffrx + Frlx - Frrx));
+% z = 1 / Jz * (lf * (Ffly + Ffry) - lr * (Frly + Frry) + w/2 * (-Fflx + Ffrx - Frlx + Frrx));
 w1 = 1 / Jw * (Tfl - rw * Fwflx);
 w2 = 1 / Jw * (Tfr - rw * Fwfrx);
 w3 = 1 / Jw * (Trl - rw * Fwrlx);

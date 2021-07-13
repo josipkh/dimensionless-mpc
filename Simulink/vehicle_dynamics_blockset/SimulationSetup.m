@@ -19,6 +19,41 @@ tsim = 10;                  %[s] simulation time
 nsim = round(tsim/Ts)+1;    %[-] simulation length
 t = 0:Ts:tsim;              % time point vector
 
+% initial state and input
+SIM.VX_INIT = 20;  % m/s
+SIM.U_INIT = 25;  % Nm
+SIM.OMEGA_INIT = 250/79 * SIM.VX_INIT;  % rad/s
+
+vx0 = SIM.VX_INIT;
+xi0 = [vx0; 0; 0; 250/79*vx0*ones(4,1)];
+u0 = SIM.U_INIT*ones(4,1);
+
+% manoeuvre setup
+tstart = 3;
+manoeuvre = 1;
+switch manoeuvre
+    case 1  % step steer        
+        steer_goal = 45;  % target steering angle in degrees
+        steer_ramp = [0 : rad2deg(VEHICLE.MAX_STEERING_RATE)*Ts : steer_goal, steer_goal];  % limit the rate
+        steer = [zeros(1,sum(t<tstart))  steer_ramp  steer_goal*ones(1,nsim-sum(t<tstart)-length(steer_ramp))];
+        
+    case 2  % sine steer
+        steer_amplitude = 45;  % deg
+        steer_frequency = 0.05;  % Hz
+        steer = steer_amplitude*sin(2*pi*steer_frequency*(t - tstart));
+        steer(t<tstart) = 0;
+        
+        steer_clip = 90;  % deg
+        steer(steer>steer_clip) = steer_clip;
+        steer(steer<-steer_clip) = -steer_clip;
+        
+    otherwise  % drive straight
+        steer = zeros(size(t));
+end
+% change format for loading in Simulink
+steer = [t' steer'];
+vxref = [t' vx0*ones(size(t))'];
+                  
 % MPC data
 nx = 7;  % no. of states
 nu = 4;  % no. of inputs
@@ -27,18 +62,8 @@ ny = size(C,1);             % no. of tracked states
 N = 10;  % prediction horizon
 M = 3;  % control horizon (blocking)
 
-% initial state and input
-vx0 = 10;  %[m/s]
-xi0 = [vx0; 0; 0; 250/79*vx0*ones(4,1)];
-u0 = 3.2590*ones(4,1);  %[Nm]
-
-enablePi = 1;               % use Pi-groups?
-enable_constraints = [1;    % dynamics
-                      0;    % state (slip, slip angle) -> soft constraints
-                      1;    % input
-                      0];   % input rate
-
 % Pi-groups
+enablePi = 0;               % use Pi-groups?
 Mxi = diag([sqrt(params.Cfx*params.l/params.m),...
            sqrt(params.Cfx*params.l/params.m),...
            sqrt(params.Cfx/params.m/params.l)*ones(1,5)]);
@@ -66,7 +91,14 @@ MPCData.Ts = Ts;
 MPCData.Tsp = Tsp;
 MPCData.params = params;
 
+disp('Simulation init done')
 %% create the controller
+
+% select MPC setup
+enable_constraints = [1;    % dynamics
+                      0;    % state (slip, slip angle) -> soft constraints
+                      1;    % input
+                      1];   % input rate
 
 % YALMIP data
 Ad = sdpvar(nx*ones(N),nx*ones(N),'full');
@@ -91,7 +123,7 @@ ops = sdpsettings('verbose',0,...
 % ops = sdpsettings('solver','quadprog');
 
 % QP formulation
-Q = diag([1e6 0 1e8]);                  % tracked state weights
+Q = diag([1e2 0 1e4]);                  % tracked state weights
 Q = C * Mxi * C' * Q * C * Mxi * C';    % transform to Pi-space
 QN = Q;                                 % terminal cost weights
 S = 1e-3*eye(nu);                       % input weights
@@ -191,6 +223,7 @@ controller = optimizer(constraints,objective,ops,parameters_in,solutions_out);
 save SavedController.mat controller
 
 disp('Controller created')
+
 %% test the controller
 % load yalmipsimulink/Inputs.mat
 % [solutions, errorcode, errortext] = controller(inputs);
@@ -199,8 +232,3 @@ disp('Controller created')
 % else
 %     disp('Controller test OK');
 % end
-
-%% 
-SIM.VX_REF = 10;  % m/s
-SIM.VX_INIT = 10;  % m/s
-SIM.OMEGA_INIT = 250/79 * SIM.VX_INIT;  % rad/s

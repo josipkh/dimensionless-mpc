@@ -2,7 +2,7 @@
 clear;clc;close all;
 
 %% load vehicle parameters
-vehicle_params = 1;  % 1: lab scale, 2: full size
+vehicle_params = 2;  % 1: lab scale, 2: full size
 f = 1;  % scaling factor
 load_vehicle_parameters;
 
@@ -21,7 +21,7 @@ formulate_pi_groups;  % M,Ap,Bp,Cp,Apd,Bpd
 yalmip('clear');
 
 % MPC setup
-pigroups = 0;  % binary
+pigroups = 1;  % binary
 
 nx = size(A,1);  % no. of states
 nu = size(B,2);  % no. of inputs
