@@ -172,12 +172,24 @@ figure; t = (1:n)*Ts;
 subplot(5,1,1); plot(t,180/pi*uhist*VEHICLE.STEERING_RATIO); title('Steering angle [deg]')
     hold on; yline(180/pi*VEHICLE.MAX_STEERING_ANGLE,'--r'); yline(-180/pi*VEHICLE.MAX_STEERING_ANGLE,'--r')
 subplot(5,1,2); plot(t,[0 180/pi*diff(uhist)/Ts*VEHICLE.STEERING_RATIO]); title('Steering angle rate [deg/s]')
-hold on; yline(180/pi*VEHICLE.MAX_STEERING_RATE,'--r'); yline(-180/pi*VEHICLE.MAX_STEERING_RATE,'--r')
+    hold on; yline(180/pi*VEHICLE.MAX_STEERING_RATE,'--r'); yline(-180/pi*VEHICLE.MAX_STEERING_RATE,'--r')
 subplot(5,1,3); plot([0 t],xhist(1,:)); title('Lateral position [m]')
     hold on; plot(t,rhist(1,:),'r--')
 subplot(5,1,4); plot([0 t],180/pi*xhist(3,:)); title('Yaw angle [deg]')
-subplot(5,1,5); plot([0 t],xhist(4,:),'b'); title('Yaw rate [rad/s]')
+subplot(5,1,5); plot([0 t],180/pi*xhist(4,:),'b'); title('Yaw rate [deg/s]')
 xlabel('t [s]')
+
+if pigroups
+    figure
+    subplot(5,1,1); plot(t,180/pi*uhist*VEHICLE.STEERING_RATIO); title('Steering angle [deg]')
+        hold on; yline(180/pi*VEHICLE.MAX_STEERING_ANGLE,'--r'); yline(-180/pi*VEHICLE.MAX_STEERING_ANGLE,'--r')
+    subplot(5,1,2); plot(t,[0 180/pi*diff(uhist)/Ts*VEHICLE.STEERING_RATIO]); title('Steering angle rate [deg/s]')
+        hold on; yline(180/pi*VEHICLE.MAX_STEERING_RATE,'--r'); yline(-180/pi*VEHICLE.MAX_STEERING_RATE,'--r')
+    subplot(5,1,3); plot([0 t],1/M(1)*xhist(1,:)); title('Lateral position [-]')
+        hold on; plot(t,1/M(1)*rhist(1,:),'r--')
+    subplot(5,1,4); plot([0 t],180/pi*xhist(3,:)); title('Yaw angle [deg]')
+    subplot(5,1,5); plot([0 t],1/M(end)*xhist(4,:),'b'); title('Yaw rate [-]')
+end
 
 %% LQR
 % Sp = ss(Ap,Bp,Cp,0);

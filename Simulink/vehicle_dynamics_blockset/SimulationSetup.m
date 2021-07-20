@@ -15,9 +15,10 @@ max_steering_rate = VEHICLE.MAX_STEERING_RATE;
 
 % simulation parameters
 Ts = 0.05;                  %[s] sampling time
-tsim = 10;                  %[s] simulation time
+tsim = 30;                  %[s] simulation time
 nsim = round(tsim/Ts)+1;    %[-] simulation length
 t = 0:Ts:tsim;              % time point vector
+SIM.T = t;
 
 % initial state and input
 SIM.VX_INIT = 20;  % m/s
@@ -30,10 +31,10 @@ u0 = SIM.U_INIT*ones(4,1);
 
 % manoeuvre setup
 tstart = 3;
-manoeuvre = 1;
+manoeuvre = 2;
 switch manoeuvre
     case 1  % step steer        
-        steer_goal = 45;  % target steering angle in degrees
+        steer_goal = 20;  % target steering angle in degrees
         steer_ramp = [0 : rad2deg(VEHICLE.MAX_STEERING_RATE)*Ts : steer_goal, steer_goal];  % limit the rate
         steer = [zeros(1,sum(t<tstart))  steer_ramp  steer_goal*ones(1,nsim-sum(t<tstart)-length(steer_ramp))];
         
@@ -63,7 +64,7 @@ N = 10;  % prediction horizon
 M = 3;  % control horizon (blocking)
 
 % Pi-groups
-enablePi = 0;               % use Pi-groups?
+enablePi = 1;               % use Pi-groups?
 Mxi = diag([sqrt(params.Cfx*params.l/params.m),...
            sqrt(params.Cfx*params.l/params.m),...
            sqrt(params.Cfx/params.m/params.l)*ones(1,5)]);

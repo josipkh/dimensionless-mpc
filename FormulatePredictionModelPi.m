@@ -86,10 +86,10 @@ Fwrlx = Crx * srlx;  Fwrly = -Cry * alpharl;
 Fwrrx = Crx * srrx;  Fwrry = -Cry * alpharr;
 
 % longitudinal and lateral forces
-Fflx = Fwflx * cos(deltaf) - Fwfly * sin(deltaf);   Frlx = Fwrlx;
-Ffrx = Fwfrx * cos(deltaf) - Fwfry * sin(deltaf);   Frrx = Fwrrx;
-Ffly = Fwflx * sin(deltaf) + Fwfly * cos(deltaf);   Frly = Fwrly;
-Ffry = Fwfrx * sin(deltaf) + Fwfry * cos(deltaf);   Frry = Fwrry;
+Fflx = Fwflx * cos(deltafl) - Fwfly * sin(deltafl);   Frlx = Fwrlx;
+Ffrx = Fwfrx * cos(deltafr) - Fwfry * sin(deltafr);   Frrx = Fwrrx;
+Ffly = Fwflx * sin(deltafl) + Fwfly * cos(deltafl);   Frly = Fwrly;
+Ffry = Fwfrx * sin(deltafr) + Fwfry * cos(deltafr);   Frry = Fwrry;
 
 % vehicle dynamics
 x = thetad * vy + 1 / m * (Fflx + Ffrx + Frlx + Frrx);

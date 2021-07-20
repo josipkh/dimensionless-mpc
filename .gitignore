@@ -12,6 +12,7 @@ sccprj/
 
 # Simulink autosave extension
 *.autosave
+*.asv
 
 # Matlab code generation folders
 codegen/
@@ -26,3 +27,5 @@ Test*/
 *plots*
 *figures*
 Simulation results/
+*data
+*Literature*
