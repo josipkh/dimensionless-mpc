@@ -100,7 +100,7 @@ uprev = 0;
 
 rhist = nan(ny, n);
 tsim = 0:Ts:(n+N)*Ts;
-wavelength = 4 * 8 * (Lf+Lr);
+wavelength = 32 * (Lf+Lr);
 frequency = V / wavelength;
 yref = 1*(Lf+Lr)*sin(2*pi*frequency*(tsim-Ts*n/5));
 yref(1:n/5) = 0;

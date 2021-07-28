@@ -4,7 +4,7 @@ switch vehicle_params
     case 1
         % parameters lab size
         load ../../ParamsLab
-        V = 60/3.6/10;  % m/s
+        V = 60/3.6/10 - 0.1;  % m/s
     case 2
         % parameters full size
         load ../../ParamsFull
