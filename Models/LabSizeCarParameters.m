@@ -1,7 +1,7 @@
 %==============================================================================================
 % Numerical vehicle data representative of the FER lab vehicle
 %==============================================================================================
-clear;clc;
+function [VEHICLE, CONST] = LabSizeCarParameters()
 
 %% --- Chassis ------------------------------------------------------------
 VEHICLE.MASS                = 1.173 + 1;    %[kg]       Total mass; extra mass at CoG to match Pi groups
@@ -60,6 +60,4 @@ VEHICLE.STEERING_RATIO      = 1;            %[-]        Steering wheel angle / r
 VEHICLE.MAX_STEERING_RATE   = 0.262;        %[rad/s]    Maximal steering angle rate
 VEHICLE.MAX_STEERING_ANGLE  = 0.262;        %[rad]      Maximal steering wheel angle
 
-%% Save the parameters in a .mat file
-save ParamsLab VEHICLE CONST
-disp('Lab scale car parameters saved')
+end

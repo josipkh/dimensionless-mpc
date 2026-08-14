@@ -1,9 +1,14 @@
 %% Two-track model LTV MPC
 %% Problem setup
 clear;yalmip('clear');close all;clc
+addpath("Models")
 
-% vehicle parameters
-load ParamsFull.mat
+% vehicle parameters and model setup
+[VEHICLE, CONST] = FullSizeCarParameters();
+disp("Preparing the models...")
+SetupModels(VEHICLE, CONST)  % verify that all models are generated
+addpath("Codegen")  % stores the dynamics functions
+
 m   = VEHICLE.MASS;
 L   = VEHICLE.WHEEL_BASE;
 Cfx = VEHICLE.SLIP_STIFF;
@@ -26,7 +31,8 @@ Ts = 0.05;                  % sampling time [s]
 Tsim = 10;                   % simulation time [s]
 nsim = Tsim / Ts;           % no. of simulation steps
 
-% MPC parameters
+%% MPC setup
+disp("Creating the MPC...")
 N = 10;                     % prediction horizon
 M = 3;                      % control horizon (blocking)
 
@@ -230,6 +236,7 @@ U = u0;
 ax = 0;
 ay = 0;
 
+disp("Running the simulation...")
 tic
 for i = 1 : nsim
     % linearize around the predicted states and inputs
@@ -281,11 +288,10 @@ for i = 1 : nsim
     
     % apply the inputs to the plant
     U = solutions{1}(:,1);  % take the first optimal input
-    U = Mu * U  % convert back from Pi-space
+    U = Mu * U;  % convert back from Pi-space
     Xi = Mxi * Xi;
     [~,Xi] = ode45(@SimulationModel,[0,Ts],[Xi;U;deltaf(i);ax;ay]);
-    Xi = Xi(end,1:nx)'
-    i
+    Xi = Xi(end,1:nx)';
     
     % calculate the acceleration
     f = SimulationModel(0,[Xi;U;deltaf(i);ax;ay]);
@@ -302,6 +308,7 @@ end
 toc
 
 %% plot the results
+disp("Plotting...")
 t = 0:Ts:nsim*Ts;
 xiref = Mxi(1:3,1:3) * xiref(:,1:nsim+1);
 
@@ -323,7 +330,7 @@ title('States and reference')
 % inputs
 figure
 stairs(t,[u0 Us]')
-legend('T_{fl}','T_{fr}','T_{rl}','T_{rr}')
+legend('$T_{fl}$','$T_{fr}$','$T_{rl}$','$T_{rr}$')
 title('Input torque')
 xlabel('t [s]')
 ylabel('Input torque [Nm]')
@@ -331,7 +338,7 @@ ylabel('Input torque [Nm]')
 % input rate
 figure
 stairs(t(2:end),diff([u0 Us],1,2)')
-legend('\Delta T_{fl}','\Delta T_{fr}','\Delta T_{rl}','\Delta T_{rr}')
+legend('$\Delta T_{fl}$','$\Delta T_{fr}$','$\Delta T_{rl}$','$\Delta T_{rr}$')
 title('Input torque rate')
 xlabel('t [s]')
 ylabel('Input torque rate [Nm/s]')
@@ -360,7 +367,7 @@ plot(X,Y,'b--')
 axis equal;
 grid on;
 hold on;
-title('Path')
+title('Vehicle path')
 xlabel('X [m]')
 ylabel('Y [m]')
 
@@ -368,33 +375,9 @@ for i = 1:1/(Ts):length(psi)
     patch(X(i)+[X1(i) X2(i) X3(i) X4(i)], Y(i)+[Y1(i) Y2(i) Y3(i) Y4(i)],'red','facecolor','none','edgecolor','red');
 end
 
-%% old code archive
+if reference == 3
+    xlim([-5 70])
+    ylim([-5 60])
+end
 
-%     slipConstraints = [    
-%         params.rw*xi{k}(5) - (slipMax + 1)*(cos(deltaf)*(xi{k}(2) - xi{k}(4)*params.w) + sin(deltaf)*(xi{k}(1) + params.lf*xi{k}(4))) <= e{k}(1),...
-%         params.rw*xi{k}(6) - (slipMax + 1)*(cos(deltaf)*(xi{k}(2) + xi{k}(4)*params.w) + sin(deltaf)*(xi{k}(1) + params.lf*xi{k}(4))) <= e{k}(2),...
-%         params.rw*xi{k}(7) - (xi{k}(2) - xi{k}(4)*params.w)*(slipMax + 1) <= e{k}(3),...
-%         params.rw*xi{k}(8) - (xi{k}(2) + xi{k}(4)*params.w)*(slipMax + 1) <= e{k}(4),...
-%         (slipMin + 1)*(cos(deltaf)*(xi{k}(2) - xi{k}(4)*params.w) + sin(deltaf)*(xi{k}(1) + params.lf*xi{k}(4))) - params.rw*xi{k}(5) <= e{k}(5),...
-%         (slipMin + 1)*(cos(deltaf)*(xi{k}(2) + xi{k}(4)*params.w) + sin(deltaf)*(xi{k}(1) + params.lf*xi{k}(4))) - params.rw*xi{k}(6) <= e{k}(6),...
-%         (slipMin + 1)*(xi{k}(2) - xi{k}(4)*params.w) - params.rw*xi{k}(7) <= e{k}(7),...
-%         (slipMin + 1)*(xi{k}(2) + xi{k}(4)*params.w) - params.rw*xi{k}(8) <= e{k}(8)]
-
-%     slipAngleConstraints = [        
-%         cos(deltaf)*(xi{k}(1) + params.lf*xi{k}(4)) - sin(deltaf)*(xi{k}(2) - xi{k}(4)*params.w) - slipAngleMax*(cos(deltaf)*(xi{k}(2) - xi{k}(4)*params.w) + sin(deltaf)*(xi{k}(1) + params.lf*xi{k}(4))) <= e{k}(9),...
-%         cos(deltaf)*(xi{k}(1) + params.lf*xi{k}(4)) - sin(deltaf)*(xi{k}(2) + xi{k}(4)*params.w) - slipAngleMax*(cos(deltaf)*(xi{k}(2) + xi{k}(4)*params.w) + sin(deltaf)*(xi{k}(1) + params.lf*xi{k}(4))) <= e{k}(10),...
-%         xi{k}(1) - params.lr*xi{k}(4) - slipAngleMax*(xi{k}(2) - xi{k}(4)*params.w) <= e{k}(11),...
-%         xi{k}(1) - params.lr*xi{k}(4) - slipAngleMax*(xi{k}(2) + xi{k}(4)*params.w) <= e{k}(12),...
-%         slipAngleMin*(cos(deltaf)*(xi{k}(2) - xi{k}(4)*params.w) + sin(deltaf)*(xi{k}(1) + params.lf*xi{k}(4))) - cos(deltaf)*(xi{k}(1) + params.lf*xi{k}(4)) - sin(deltaf)*(xi{k}(2) - xi{k}(4)*params.w) <= e{k}(13),...
-%         slipAngleMin*(cos(deltaf)*(xi{k}(2) + xi{k}(4)*params.w) + sin(deltaf)*(xi{k}(1) + params.lf*xi{k}(4))) - cos(deltaf)*(xi{k}(1) + params.lf*xi{k}(4)) - sin(deltaf)*(xi{k}(2) + xi{k}(4)*params.w) <= e{k}(14),...
-%         slipAngleMin*(xi{k}(2) - xi{k}(4)*params.w) - xi{k}(1) - params.lr*xi{k}(4) <= e{k}(15),...
-%         slipAngleMin*(xi{k}(2) + xi{k}(4)*params.w) - xi{k}(1) - params.lr*xi{k}(4) <= e{k}(16)];
-
-% plot(t,Xis')
-% hold on
-% plot(t,(Mxi(1:4,1:4)*xiref(:,1:nsim+1))')
-% legend('v_y','v_x','\theta','der(\theta)',...
-%        '\omega_{fl}','\omega_{fr}','\omega_{rl}','\omega_{rr}',...
-%        'v_{y,ref}','v_{x,ref}','\theta_{ref}','der(\theta)_{ref}')
-% xlabel('t [s]')
-% ylabel('States and reference')
+disp("Done.")

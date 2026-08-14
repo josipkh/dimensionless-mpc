@@ -1,7 +1,7 @@
 %==============================================================================================
 % Numerical vehicle data representative for the Company Car vehicle from IPG Carmaker examples
 %==============================================================================================
-clear;clc;
+function [VEHICLE, CONST] = FullSizeCarParameters()
 
 %% --- Chassis ------------------------------------------------------------
 VEHICLE.MASS                = 1600;         %[kg]       Total mass
@@ -60,6 +60,4 @@ VEHICLE.STEERING_RATIO      = 13;           %[-]        Steering wheel angle / r
 VEHICLE.MAX_STEERING_RATE   = 2*pi;         %[rad/s]    Maximal steering angle rate
 VEHICLE.MAX_STEERING_ANGLE  = 2*pi;         %[rad]      Maximal steering wheel angle
 
-%% Save the parameters in a .mat file
-save ParamsFull VEHICLE CONST
-disp('Full size car parameters saved')
+end
