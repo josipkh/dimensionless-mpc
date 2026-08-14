@@ -20,12 +20,9 @@ codegen/
 # Simulink cache
 *.slxc
 
-Generated code/
-
-Test*/
-
-*plots*
-*figures*
+Codegen/
+Test/
 Simulation results/
-*data
-*Literature*
+
+data*
+plots*
