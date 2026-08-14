@@ -2,7 +2,8 @@
 clear;clc;close all
 
 % Vehicle parameters
-load ../ParamsFull
+addpath("Models")
+[VEHICLE, CONST] = FullSizeCarParameters();
 g = CONST.GRAVITY;
 m = VEHICLE.MASS;
 L = VEHICLE.WHEEL_BASE;
