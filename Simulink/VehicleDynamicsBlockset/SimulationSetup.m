@@ -1,8 +1,9 @@
 %% Initialize the simulation and create an MPC controller using YALMIP
 clear;yalmip('clear');clc;close all
 
-load ../../ParamsFull.mat
-load ../yalmipsimulink/Params.mat
+addpath("../../Models")
+[VEHICLE, CONST] = FullSizeCarParameters();
+load ../SimpleModel/Params.mat
 m   = VEHICLE.MASS;
 L   = VEHICLE.WHEEL_BASE;
 Cfx = VEHICLE.SLIP_STIFF;
